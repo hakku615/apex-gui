@@ -221,21 +221,23 @@ public sealed partial class MainWindow
                             for (var i = 0; i < boxes.Length; i++)
                             {
                                 var box = boxes[i];
+                                var inputWidth = Math.Max(1, box.InputWidth);
+                                var inputHeight = Math.Max(1, box.InputHeight);
                                 var x1 = box.X - box.W * 0.5f;
                                 var y1 = box.Y - box.H * 0.5f;
                                 var x2 = box.X + box.W * 0.5f;
                                 var y2 = box.Y + box.H * 0.5f;
 
-                                var minX = Math.Clamp(MathF.Min(x1, x2), 0f, frameWidth);
-                                var minY = Math.Clamp(MathF.Min(y1, y2), 0f, frameHeight);
-                                var maxX = Math.Clamp(MathF.Max(x1, x2), 0f, frameWidth);
-                                var maxY = Math.Clamp(MathF.Max(y1, y2), 0f, frameHeight);
+                                var minX = Math.Clamp(MathF.Min(x1, x2), 0f, inputWidth);
+                                var minY = Math.Clamp(MathF.Min(y1, y2), 0f, inputHeight);
+                                var maxX = Math.Clamp(MathF.Max(x1, x2), 0f, inputWidth);
+                                var maxY = Math.Clamp(MathF.Max(y1, y2), 0f, inputHeight);
 
                                 var overlayRect = new System.Drawing.RectangleF(
-                                    drawRect.Left + minX / frameWidth * drawRect.Width,
-                                    drawRect.Top + minY / frameHeight * drawRect.Height,
-                                    (maxX - minX) / frameWidth * drawRect.Width,
-                                    (maxY - minY) / frameHeight * drawRect.Height);
+                                    drawRect.Left + minX / inputWidth * drawRect.Width,
+                                    drawRect.Top + minY / inputHeight * drawRect.Height,
+                                    (maxX - minX) / inputWidth * drawRect.Width,
+                                    (maxY - minY) / inputHeight * drawRect.Height);
 
                                 if (overlayRect.Width > 1f && overlayRect.Height > 1f)
                                 {
