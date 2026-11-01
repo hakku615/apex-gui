@@ -5,7 +5,8 @@
         int CaptureWidth,
         int CaptureHeight,
         int DmlDeviceId,
-        bool UseWgcCapture);
+        CaptureSource CaptureSource,
+        string SpoutSender);
 
     private DesktopCaptureWorker? _dxgiWorker;
     private OnnxWorker? _onnxWorker;
@@ -41,7 +42,8 @@
             captureSize,
             captureSize,
             DmlAdapterInfo.SelectedDeviceId,
-            _useWgcCapture);
+            _captureSource,
+            _spoutSenderName);
     }
 
     private void ApplyVisionPipelineState(VisionPipelineConfig? targetConfig)
@@ -78,7 +80,7 @@
         try
         {
             StopVisionPipeline();
-            _dxgiWorker = new DesktopCaptureWorker(config.UseWgcCapture);
+            _dxgiWorker = new DesktopCaptureWorker(config.CaptureSource, config.SpoutSender);
             _dxgiWorker.SetCaptureRegion(config.CaptureWidth, config.CaptureHeight);
             _dxgiWorker.SetPreviewFrameCacheEnabled(IsSmartCorePreviewWindowOpen());
             _onnxWorker = new OnnxWorker(model, config.DmlDeviceId);

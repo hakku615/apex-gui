@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 ﻿using System.Diagnostics;
 using System.Threading;
 using Vortice.Direct3D;
@@ -8,6 +9,12 @@ using static Vortice.DXGI.DXGI;
 
 internal sealed class DesktopCaptureWorker : IDisposable
 {
+    [DllImport("winmm.dll", EntryPoint = "timeBeginPeriod")]
+    private static extern uint TimeBeginPeriod(uint periodMs);
+
+    [DllImport("winmm.dll", EntryPoint = "timeEndPeriod")]
+    private static extern uint TimeEndPeriod(uint periodMs);
+
     private const double TargetCaptureIntervalMs = 1000.0 / 60.0;
     private readonly object _sync = new();
     private readonly Thread _thread;
@@ -25,21 +32,28 @@ internal sealed class DesktopCaptureWorker : IDisposable
     private bool _weaponRoiCaptureEnabled = true;
     private string? _lastError;
     private OnnxWorker? _frameConsumer;
-    private readonly bool _useWgcCapture;
+    private readonly CaptureSource _captureSource;
+    private readonly string? _spoutSenderName;
 
     private readonly Queue<double> _pendingCaptureMs = new();
     private int _requestedCaptureWidth = 320;
     private int _requestedCaptureHeight = 320;
 
-    public DesktopCaptureWorker(bool useWgcCapture)
+    public DesktopCaptureWorker(CaptureSource captureSource, string? spoutSenderName)
     {
-        _useWgcCapture = useWgcCapture;
+        _captureSource = captureSource;
+        _spoutSenderName = spoutSenderName;
         _thread = new Thread(CaptureThreadMain)
         {
             IsBackground = true,
-            Name = useWgcCapture ? "WGC-Capture-Worker" : "DXGI-Capture-Worker"
+            Name = captureSource switch
+            {
+                CaptureSource.Wgc => "WGC-Capture-Worker",
+                CaptureSource.Spout => "Spout-Capture-Worker",
+                _ => "DXGI-Capture-Worker"
+            }
         };
-        if (useWgcCapture)
+        if (captureSource == CaptureSource.Wgc)
         {
             _thread.SetApartmentState(ApartmentState.STA);
         }
@@ -158,23 +172,39 @@ internal sealed class DesktopCaptureWorker : IDisposable
 
     private void CaptureThreadMain()
     {
+        var timerResolutionRaised = false;
         try
         {
-            using IScreenCapturer capturer = _useWgcCapture
-                ? new WgcDesktopCapturer()
-                : new DxgiDesktopDuplicator();
+            using IScreenCapturer capturer = _captureSource switch
+            {
+                CaptureSource.Wgc => new WgcDesktopCapturer(),
+                CaptureSource.Spout => new SpoutCapturer(_spoutSenderName),
+                _ => new DxgiDesktopDuplicator()
+            };
+            if (_captureSource == CaptureSource.Spout)
+            {
+                // Thread.Sleep(1) is only precise with a 1ms system timer; the default is 15.6ms,
+                // which would cap Spout polling at the very rate this path exists to beat.
+                timerResolutionRaised = TimeBeginPeriod(1) == 0;
+            }
             var timer = Stopwatch.StartNew();
             var loopTimer = Stopwatch.StartNew();
             var nextLoopAtMs = 0.0;
 
             while (_running)
             {
-                if (_useWgcCapture)
+                if (_captureSource == CaptureSource.Wgc)
                 {
                     if (!capturer.TryWaitForFrame(100))
                     {
                         continue;
                     }
+                }
+                else if (_captureSource == CaptureSource.Spout)
+                {
+                    // Spout is push-driven: the sender publishes into a shared texture and we poll it.
+                    // Pacing at 60Hz would add up to a frame of latency, so poll at ~1ms instead.
+                    Thread.Sleep(1);
                 }
                 else
                 {
@@ -213,6 +243,7 @@ internal sealed class DesktopCaptureWorker : IDisposable
 
                     if (ok)
                     {
+                        _lastError = null;
                         _pendingCaptureMs.Enqueue(elapsedMs);
                         _captureFrameId++;
                         frameId = _captureFrameId;
@@ -247,7 +278,12 @@ internal sealed class DesktopCaptureWorker : IDisposable
                     else if (!string.IsNullOrWhiteSpace(error))
                     {
                         _lastError = error;
-                        _running = false;
+                        // A missing Spout sender is a normal transient state (OBS restarting, source hidden);
+                        // keep polling so capture resumes by itself instead of requiring a pipeline restart.
+                        if (_captureSource != CaptureSource.Spout)
+                        {
+                            _running = false;
+                        }
                     }
                 }
 
@@ -263,6 +299,13 @@ internal sealed class DesktopCaptureWorker : IDisposable
             {
                 _lastError = $"{ex.GetType().Name}: {ex.Message}";
                 _running = false;
+            }
+        }
+        finally
+        {
+            if (timerResolutionRaised)
+            {
+                TimeEndPeriod(1);
             }
         }
     }

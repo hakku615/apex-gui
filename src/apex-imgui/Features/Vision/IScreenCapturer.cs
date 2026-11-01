@@ -1,3 +1,10 @@
+internal enum CaptureSource
+{
+    Dxgi,
+    Wgc,
+    Spout
+}
+
 internal interface IScreenCapturer : IDisposable
 {
     void SetCaptureRegion(int width, int height);

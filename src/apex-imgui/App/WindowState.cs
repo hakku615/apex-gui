@@ -50,9 +50,14 @@ internal sealed class WindowStateService
             }
 
             values.TryGetValue("DmlAdapterDescription", out var dmlAdapterDescription);
-            var useWgcCapture = values.TryGetValue("UseWgcCapture", out var useWgcCaptureRaw)
-                && bool.TryParse(useWgcCaptureRaw, out var parsedUseWgcCapture)
-                && parsedUseWgcCapture;
+            var captureSource = CaptureSource.Dxgi;
+            if (values.TryGetValue("CaptureSource", out var captureSourceRaw)
+                && Enum.TryParse<CaptureSource>(captureSourceRaw, ignoreCase: true, out var parsedCaptureSource))
+            {
+                captureSource = parsedCaptureSource;
+            }
+
+            values.TryGetValue("SpoutSender", out var spoutSender);
 
             snapshot = new WindowStateSnapshot
             {
@@ -63,7 +68,8 @@ internal sealed class WindowStateService
                 DmlAdapterDescription = string.IsNullOrWhiteSpace(dmlAdapterDescription)
                     ? null
                     : dmlAdapterDescription.Trim(),
-                UseWgcCapture = useWgcCapture
+                CaptureSource = captureSource,
+                SpoutSender = string.IsNullOrWhiteSpace(spoutSender) ? null : spoutSender.Trim()
             };
             return true;
         }
@@ -83,7 +89,8 @@ internal sealed class WindowStateService
             $"IsMaximized={snapshot.IsMaximized}",
             $"SelectedGamepadInstanceId={(snapshot.SelectedGamepadInstanceId.HasValue ? snapshot.SelectedGamepadInstanceId.Value.ToString() : string.Empty)}",
             $"DmlAdapterDescription={snapshot.DmlAdapterDescription ?? string.Empty}",
-            $"UseWgcCapture={snapshot.UseWgcCapture}") + Environment.NewLine;
+            $"CaptureSource={snapshot.CaptureSource}",
+            $"SpoutSender={snapshot.SpoutSender ?? string.Empty}") + Environment.NewLine;
         File.WriteAllText(filePath, content);
     }
 }
@@ -95,5 +102,6 @@ internal sealed class WindowStateSnapshot
     public bool IsMaximized { get; init; }
     public uint? SelectedGamepadInstanceId { get; init; }
     public string? DmlAdapterDescription { get; init; }
-    public bool UseWgcCapture { get; init; }
+    public CaptureSource CaptureSource { get; init; } = CaptureSource.Dxgi;
+    public string? SpoutSender { get; init; }
 }

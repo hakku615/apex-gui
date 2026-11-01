@@ -4,7 +4,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.18362.0</TargetFramework>
     <ApplicationIcon>Assets\Icons\3mz_ds_ver.ico</ApplicationIcon>
-    <Version>5.13.2</Version>
+    <Version>5.14.0</Version>
     <RootNamespace>apex_imgui</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -34,6 +34,7 @@
     <PackageReference Include="OpenTK" Version="4.9.4" />
     <PackageReference Include="SDL3-CS" Version="3.4.2" />
     <PackageReference Include="SDL3-CS.Native" Version="3.4.2" />
+    <PackageReference Include="Spout2.NET" Version="0.1.0-alpha.3" />
     <PackageReference Include="StbImageSharp" Version="2.30.15" />
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
     <PackageReference Include="Vortice.DXGI" Version="3.8.3" />

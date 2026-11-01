@@ -244,21 +244,90 @@ public sealed partial class MainWindow
         ImGui.EndDisabled();
         ImGui.SameLine();
         ImGui.BeginDisabled(_mappingRuntimeState.IsEnabled);
-        var useWgcCapture = _useWgcCapture;
-        if (ImGui.Checkbox("WGC##SmartCoreWgcCapture", ref useWgcCapture))
+        DrawCaptureSourceControls(metrics.ReserveWidth);
+        ImGui.EndDisabled();
+    }
+
+    private void DrawCaptureSourceControls(float reserveWidth)
+    {
+        var style = ImGui.GetStyle();
+        var captureSourceIndex = CaptureSourceIndexOf(_captureSource);
+
+        var captureSourceComboWidth = 0f;
+        for (var i = 0; i < CaptureSourceOptions.Length; i++)
         {
-            _useWgcCapture = useWgcCapture;
+            captureSourceComboWidth = MathF.Max(captureSourceComboWidth, ImGui.CalcTextSize(CaptureSourceOptions[i]).X);
+        }
+
+        captureSourceComboWidth += style.FramePadding.X * 2f + ImGui.GetFrameHeight();
+
+        ImGui.SetNextItemWidth(captureSourceComboWidth);
+        if (ImGui.BeginCombo("##CaptureSourceCombo", CaptureSourceOptions[captureSourceIndex]))
+        {
+            for (var i = 0; i < CaptureSourceOptions.Length; i++)
+            {
+                var isSelected = i == captureSourceIndex;
+                if (ImGui.Selectable(CaptureSourceOptions[i], isSelected))
+                {
+                    _captureSource = CaptureSourceFromIndex(i);
+                    SaveWindowState();
+                    SyncSmartCoreVisionPipeline();
+                }
+
+                if (isSelected)
+                {
+                    ImGui.SetItemDefaultFocus();
+                }
+            }
+
+            ImGui.EndCombo();
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("DXGI / WGC 直接抓屏；OBS (Spout) 接收 OBS 的 Spout 输出。");
+        }
+
+        if (_captureSource != CaptureSource.Spout)
+        {
+            return;
+        }
+
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(MathF.Max(80f, ImGui.GetContentRegionAvail().X - reserveWidth));
+        ImGui.InputTextWithHint("##SpoutSenderInput", "Spout sender", ref _spoutSenderName, 128);
+        if (ImGui.IsItemDeactivatedAfterEdit())
+        {
+            if (string.IsNullOrWhiteSpace(_spoutSenderName))
+            {
+                _spoutSenderName = DefaultSpoutSenderName;
+            }
+
             SaveWindowState();
             SyncSmartCoreVisionPipeline();
         }
 
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip("开启后使用 WGC 截图，关闭则使用 DXGI。");
+            ImGui.SetTooltip("OBS 里「游戏采集」上 Spout 滤镜的发送名称。");
         }
-
-        ImGui.EndDisabled();
     }
+
+    private static readonly string[] CaptureSourceOptions = { "DXGI", "WGC", "OBS (Spout)" };
+
+    private static int CaptureSourceIndexOf(CaptureSource captureSource) => captureSource switch
+    {
+        CaptureSource.Wgc => 1,
+        CaptureSource.Spout => 2,
+        _ => 0
+    };
+
+    private static CaptureSource CaptureSourceFromIndex(int index) => index switch
+    {
+        1 => CaptureSource.Wgc,
+        2 => CaptureSource.Spout,
+        _ => CaptureSource.Dxgi
+    };
 
     private void DrawDmlAdapterRow(HomeLayoutMetrics metrics)
     {

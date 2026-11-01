@@ -20,6 +20,7 @@ public sealed partial class MainWindow : GameWindow
     private const string ViGemBusInstallPath = @"C:\Program Files\Nefarius Software Solutions";
     private const string ViGemBusInstallerUrl = "https://github.com/nefarius/ViGEmBus/releases/download/v1.22.0/ViGEmBus_1.22.0_x64_x86_arm64.exe";
     private const string WindowStateFileName = "window_state.ini";
+    private const string DefaultSpoutSenderName = "Spout_OBS_Filter";
 
     private ImGuiController? _controller;
     private float _dpiScale = 1.0f;
@@ -52,8 +53,10 @@ public sealed partial class MainWindow : GameWindow
     private TouchpadKeyCaptureTarget _activeTouchpadKeyCaptureTarget;
     private static uint? _startupSelectedGamepadInstanceId;
     private static string? _startupDmlAdapterDescription;
-    private static bool _startupUseWgcCapture;
-    private bool _useWgcCapture;
+    private static CaptureSource _startupCaptureSource;
+    private static string _startupSpoutSenderName = DefaultSpoutSenderName;
+    private CaptureSource _captureSource;
+    private string _spoutSenderName = DefaultSpoutSenderName;
     internal static string WindowStateFilePath => Path.Combine(Environment.CurrentDirectory, WindowStateFileName);
 
     internal static bool TryLoadWindowState(out WindowStateSnapshot snapshot)
@@ -61,7 +64,10 @@ public sealed partial class MainWindow : GameWindow
         var loaded = WindowStateService.TryLoad(WindowStateFilePath, out snapshot);
         _startupSelectedGamepadInstanceId = loaded ? snapshot.SelectedGamepadInstanceId : null;
         _startupDmlAdapterDescription = loaded ? snapshot.DmlAdapterDescription : null;
-        _startupUseWgcCapture = loaded && snapshot.UseWgcCapture;
+        _startupCaptureSource = loaded ? snapshot.CaptureSource : CaptureSource.Dxgi;
+        _startupSpoutSenderName = loaded && !string.IsNullOrWhiteSpace(snapshot.SpoutSender)
+            ? snapshot.SpoutSender
+            : DefaultSpoutSenderName;
         return loaded;
     }
 
@@ -81,7 +87,8 @@ public sealed partial class MainWindow : GameWindow
         base.OnLoad();
         SDL.InitSubSystem(SDL.InitFlags.Gamepad);
         _homeSelectedGamepadInstanceId = _startupSelectedGamepadInstanceId;
-        _useWgcCapture = _startupUseWgcCapture;
+        _captureSource = _startupCaptureSource;
+        _spoutSenderName = _startupSpoutSenderName;
         _sdlGamepadWorker = new SdlGamepadWorker();
         _viGEmMappingWorker = new ViGEmMappingWorker();
         _viGEmMappingWorker.SetSdlGamepadWorker(_sdlGamepadWorker);
@@ -741,7 +748,8 @@ protected override void OnResize(ResizeEventArgs e)
                 DmlAdapterDescription = DmlAdapterInfo.Adapters.Count > 0
                     ? DmlAdapterInfo.SelectedDescription
                     : null,
-                UseWgcCapture = _useWgcCapture
+                CaptureSource = _captureSource,
+                SpoutSender = _spoutSenderName
             };
             WindowStateService.Save(WindowStateFilePath, snapshot);
         }

@@ -4,7 +4,15 @@ using System.Threading;
 
 public sealed partial class MainWindow
 {
-    private const int SmartCorePreviewIntervalMs = 1000 / 60;
+    [DllImport("winmm.dll", EntryPoint = "timeBeginPeriod")]
+    private static extern uint WinMmTimeBeginPeriod(uint periodMs);
+
+    [DllImport("winmm.dll", EntryPoint = "timeEndPeriod")]
+    private static extern uint WinMmTimeEndPeriod(uint periodMs);
+
+    // The preview follows the capture -> detection rate instead of a fixed 60Hz: it polls for new
+    // frames every millisecond and only repaints when the pipeline actually produced something.
+    private const int SmartCorePreviewActiveIntervalMs = 1;
     private readonly object _smartCorePreviewWindowLock = new();
     private System.Windows.Forms.Form? _smartCorePreviewWindow;
     private bool _smartCorePreviewShuttingDown;
@@ -55,6 +63,7 @@ public sealed partial class MainWindow
                 form.SizeGripStyle = System.Windows.Forms.SizeGripStyle.Hide;
                 form.BackColor = System.Drawing.Color.FromArgb(18, 20, 24);
                 form.ShowInTaskbar = false;
+                var refreshTimer = new System.Windows.Forms.Timer { Interval = SmartCorePreviewActiveIntervalMs };
                 form.Shown += (_, _) =>
                 {
                     form.MinimumSize = form.Size;
@@ -65,6 +74,15 @@ public sealed partial class MainWindow
 
                 form.VisibleChanged += (_, _) =>
                 {
+                    if (form.Visible)
+                    {
+                        refreshTimer.Start();
+                    }
+                    else
+                    {
+                        refreshTimer.Stop();
+                    }
+
                     UpdateSmartCorePreviewCaptureDemand(form.Visible);
                 };
 
@@ -89,7 +107,6 @@ public sealed partial class MainWindow
                 var displayWeaponSimilarity = 0.0f;
                 var displayWeaponName = WeaponTemplateCatalog.EmptyHandName;
 
-                var refreshTimer = new System.Windows.Forms.Timer { Interval = SmartCorePreviewIntervalMs };
                 refreshTimer.Tick += (_, _) =>
                 {
                     if (!form.Visible)
@@ -340,9 +357,16 @@ public sealed partial class MainWindow
                     _smartCorePreviewWindow = form;
                 }
 
-                refreshTimer.Start();
                 form.Show();
-                System.Windows.Forms.Application.Run(form);
+                WinMmTimeBeginPeriod(1);
+                try
+                {
+                    System.Windows.Forms.Application.Run(form);
+                }
+                finally
+                {
+                    WinMmTimeEndPeriod(1);
+                }
             })
             {
                 IsBackground = true,
@@ -403,7 +427,6 @@ public sealed partial class MainWindow
                 };
                 form.BackColor = System.Drawing.Color.FromArgb(20, 22, 26);
                 form.ShowInTaskbar = false;
-
                 var refreshTimer = new System.Windows.Forms.Timer { Interval = 50 };
                 refreshTimer.Tick += (_, _) =>
                 {
