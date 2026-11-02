@@ -86,6 +86,7 @@ public sealed partial class MainWindow : GameWindow
     {
         base.OnLoad();
         SDL.InitSubSystem(SDL.InitFlags.Gamepad);
+        EnsureDataDirectories();
         _homeSelectedGamepadInstanceId = _startupSelectedGamepadInstanceId;
         _captureSource = _startupCaptureSource;
         _spoutSenderName = _startupSpoutSenderName;
@@ -375,6 +376,19 @@ public sealed partial class MainWindow : GameWindow
     }
 
     private static string ConfigsDirectoryPath => Path.Combine(ContentRootDirectory, "Configs");
+
+    private static void EnsureDataDirectories()
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(ContentRootDirectory, "Models"));
+            Directory.CreateDirectory(Path.Combine(ContentRootDirectory, "Configs"));
+        }
+        catch
+        {
+            // Ignore failures: an unwritable location just leaves both lists empty.
+        }
+    }
 
     private void WriteCurrentConfigFileName(string configBaseNameWithoutExtension) =>
         _configRepository.WriteCurrentConfigFileName(configBaseNameWithoutExtension);
