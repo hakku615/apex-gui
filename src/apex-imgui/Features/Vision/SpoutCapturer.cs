@@ -377,7 +377,6 @@ internal sealed class SpoutCapturer : IScreenCapturer
         return false;
     }
 
-
     private ID3D11Texture2D CreateStagingTexture(int width, int height)
     {
         var textureDesc = new Texture2DDescription

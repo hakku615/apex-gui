@@ -61,7 +61,7 @@ public sealed partial class MainWindow
                     MinimizeBox = false
                 };
                 form.SizeGripStyle = System.Windows.Forms.SizeGripStyle.Hide;
-                form.BackColor = System.Drawing.Color.FromArgb(18, 20, 24);
+                form.BackColor = UiColors.WeaponPreviewBackground;
                 form.ShowInTaskbar = false;
                 var refreshTimer = new System.Windows.Forms.Timer { Interval = SmartCorePreviewActiveIntervalMs };
                 form.Shown += (_, _) =>
@@ -185,7 +185,7 @@ public sealed partial class MainWindow
 
                 form.Paint += (_, e) =>
                 {
-                    e.Graphics.Clear(System.Drawing.Color.FromArgb(18, 20, 24));
+                    e.Graphics.Clear(UiColors.WeaponPreviewBackground);
                     e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
                     e.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
                     e.Graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
@@ -195,7 +195,7 @@ public sealed partial class MainWindow
                     if (frameWidth <= 0 || frameHeight <= 0 || frameBuffer.Length != frameWidth * frameHeight * 4)
                     {
                         var statusText = string.IsNullOrWhiteSpace(frameError) ? "等待捕获画面..." : $"捕获错误: {frameError}";
-                        using var statusBrush = new System.Drawing.SolidBrush(System.Drawing.Color.Gainsboro);
+                        using var statusBrush = new System.Drawing.SolidBrush(UiColors.PreviewStatusText);
                         e.Graphics.DrawString(statusText, form.Font, statusBrush, new System.Drawing.PointF(mainRect.X + 12f, mainRect.Y + 12f));
                     }
                     else
@@ -234,7 +234,7 @@ public sealed partial class MainWindow
                         var boxes = _onnxWorker?.GetDebugBoxes() ?? Array.Empty<OnnxDebugBox>();
                         if (boxes.Length > 0)
                         {
-                            using var boxPen = new System.Drawing.Pen(System.Drawing.Color.Red, 2f);
+                            using var boxPen = new System.Drawing.Pen(UiColors.WeaponPreviewTargetBox, 2f);
                             for (var i = 0; i < boxes.Length; i++)
                             {
                                 var box = boxes[i];
@@ -311,7 +311,7 @@ public sealed partial class MainWindow
                     }
                     else
                     {
-                        using var statusBrush = new System.Drawing.SolidBrush(System.Drawing.Color.Gainsboro);
+                        using var statusBrush = new System.Drawing.SolidBrush(UiColors.PreviewStatusText);
                         e.Graphics.DrawString(
                             "Weapon Sobel: waiting...",
                             form.Font,
@@ -319,7 +319,7 @@ public sealed partial class MainWindow
                             new System.Drawing.PointF(sobelSectionRect.X + 12f, sobelSectionRect.Y + 10f));
                     }
 
-                    using var metricsBrush = new System.Drawing.SolidBrush(System.Drawing.Color.Gainsboro);
+                    using var metricsBrush = new System.Drawing.SolidBrush(UiColors.PreviewStatusText);
                     var metricsX = sobelSectionRect.X + 2f;
                     var metricsY = sobelSectionRect.Y + Math.Max(1, WeaponTemplateCatalog.TemplateHeight);
                     var lineHeight = form.Font.GetHeight(e.Graphics);
@@ -425,7 +425,7 @@ public sealed partial class MainWindow
                     FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog,
                     MaximizeBox = false
                 };
-                form.BackColor = System.Drawing.Color.FromArgb(20, 22, 26);
+                form.BackColor = UiColors.RangePreviewBackground;
                 form.ShowInTaskbar = false;
                 var refreshTimer = new System.Windows.Forms.Timer { Interval = 50 };
                 refreshTimer.Tick += (_, _) =>
@@ -452,8 +452,8 @@ public sealed partial class MainWindow
                     var outerRadius = drawDiameter / 2f;
                     var innerRadius = outerRadius * (inner / (float)outer);
 
-                    using var outerPen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(0, 180, 255), 2f);
-                    using var innerPen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(255, 140, 60), 2f);
+                    using var outerPen = new System.Drawing.Pen(UiColors.RangePreviewOuterRing, 2f);
+                    using var innerPen = new System.Drawing.Pen(UiColors.RangePreviewInnerRing, 2f);
 
                     var outerRect = new System.Drawing.RectangleF(
                         centerX - outerRadius,

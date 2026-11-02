@@ -140,7 +140,9 @@ public sealed partial class MainWindow
         ImGui.TextUnformatted("ViGemBus 驱动");
         ImGui.TableSetColumnIndex(1);
         ImGui.AlignTextToFramePadding();
+        ImGui.PushStyleColor(ImGuiCol.Text, vigemReady ? UiColors.StatusTextReady : UiColors.StatusTextPending);
         ImGui.TextUnformatted(vigemReady ? "已就绪" : "未就绪");
+        ImGui.PopStyleColor();
         ImGui.TableSetColumnIndex(2);
         if (ImGui.Button(vigemActionLabel))
         {
@@ -154,7 +156,9 @@ public sealed partial class MainWindow
         ImGui.TextUnformatted("输入设备");
         ImGui.TableSetColumnIndex(1);
         ImGui.AlignTextToFramePadding();
+        ImGui.PushStyleColor(ImGuiCol.Text, hasGamepads ? UiColors.StatusTextReady : UiColors.StatusTextPending);
         ImGui.TextUnformatted(hasGamepads ? "已就绪" : "未就绪");
+        ImGui.PopStyleColor();
         ImGui.TableSetColumnIndex(2);
         var gamepadIndexBeforeUi = _homeSelectedGamepadIndex;
         var inputRefreshButtonWidth = ImGui.CalcTextSize("刷新").X + topPanelStyle.FramePadding.X * 2f;
@@ -285,7 +289,7 @@ public sealed partial class MainWindow
 
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip("DXGI / WGC 直接抓屏；OBS (Spout) 接收 OBS 的 Spout 输出。");
+            ImGui.SetTooltip("DXGI / WGC 直接抓屏。\nOBS (Spout)：需先安装 OBS Studio 与 obs-spout2 插件，并在「游戏采集」源上添加 Spout 滤镜。");
         }
 
         if (_captureSource != CaptureSource.Spout)
@@ -309,7 +313,7 @@ public sealed partial class MainWindow
 
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip("OBS 里「游戏采集」上 Spout 滤镜的发送名称。");
+            ImGui.SetTooltip("OBS 里「游戏采集」上 Spout 滤镜的发送名称。\n使用前需安装 OBS Studio 和 obs-spout2 插件。");
         }
     }
 
