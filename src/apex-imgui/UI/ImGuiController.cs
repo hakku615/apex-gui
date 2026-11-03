@@ -36,6 +36,14 @@ public sealed class ImGuiController : IDisposable
         ImGui.SetCurrentContext(_context);
         var io = ImGui.GetIO();
         io.ConfigFlags &= ~ImGuiConfigFlags.DockingEnable;
+        // Dear ImGui defaults to writing "imgui.ini" next to the process working directory. This app
+        // pins every ImGui window and table width in code, so the stored layout is never read back:
+        // disable the file entirely instead of leaving a second ini behind.
+        unsafe
+        {
+            io.NativePtr->IniFilename = null;
+        }
+
         ConfigureFonts(io);
 
         var style = ImGui.GetStyle();
@@ -302,6 +310,7 @@ public sealed class ImGuiController : IDisposable
         io.Fonts.SetTexID((IntPtr)_fontTexture);
         io.Fonts.ClearTexData();
     }
+
 
     public void Dispose()
     {

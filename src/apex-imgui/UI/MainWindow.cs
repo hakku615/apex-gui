@@ -57,7 +57,7 @@ public sealed partial class MainWindow : GameWindow
     private static string _startupSpoutSenderName = DefaultSpoutSenderName;
     private CaptureSource _captureSource;
     private string _spoutSenderName = DefaultSpoutSenderName;
-    internal static string WindowStateFilePath => Path.Combine(Environment.CurrentDirectory, WindowStateFileName);
+    internal static string WindowStateFilePath => Path.Combine(ContentRootDirectory, WindowStateFileName);
 
     internal static bool TryLoadWindowState(out WindowStateSnapshot snapshot)
     {
@@ -363,17 +363,9 @@ public sealed partial class MainWindow : GameWindow
         TryApplyModelSelectionFromCurrentConfig();
     }
 
-    private static string ContentRootDirectory
-    {
-        get
-        {
-#if DEBUG
-            return Environment.CurrentDirectory;
-#else
-            return AppContext.BaseDirectory;
-#endif
-        }
-    }
+    // Always resolve Models/Configs next to the executable: deriving it from the working directory
+    // meant launching from a shortcut or another folder silently created the data tree there.
+    private static string ContentRootDirectory => AppContext.BaseDirectory;
 
     private static string ConfigsDirectoryPath => Path.Combine(ContentRootDirectory, "Configs");
 
