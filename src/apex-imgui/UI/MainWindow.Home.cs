@@ -68,6 +68,8 @@ public sealed partial class MainWindow
                                    "依赖状态",
                                    "配置选择",
                                    "智慧核心",
+                                   "捕获方式",
+                                   "推理设备",
                                    "选择游戏",
                                    "选择模型",
                                    "吸附参数设定",
@@ -105,8 +107,9 @@ public sealed partial class MainWindow
 
         DrawDependencyStatusRow(vigemReady, metrics, topPanelStyle);
         DrawConfigSelectionRow(metrics, topPanelStyle);
-        DrawSmartCoreRow(metrics);
+        DrawCaptureSourceRow(metrics);
         DrawDmlAdapterRow(metrics);
+        DrawSmartCoreRow(metrics);
 
         ImGui.EndTable();
     }
@@ -246,7 +249,16 @@ public sealed partial class MainWindow
             OpenSmartCorePreviewWindow();
         }
         ImGui.EndDisabled();
-        ImGui.SameLine();
+    }
+
+    private void DrawCaptureSourceRow(HomeLayoutMetrics metrics)
+    {
+        ImGui.TableNextRow();
+        ImGui.TableNextRow();
+        ImGui.TableSetColumnIndex(0);
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextUnformatted("捕获方式");
+        ImGui.TableSetColumnIndex(1);
         ImGui.BeginDisabled(_mappingRuntimeState.IsEnabled);
         DrawCaptureSourceControls(metrics.ReserveWidth);
         ImGui.EndDisabled();
@@ -337,6 +349,9 @@ public sealed partial class MainWindow
     {
         ImGui.TableNextRow();
         ImGui.TableNextRow();
+        ImGui.TableSetColumnIndex(0);
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextUnformatted("推理设备");
         ImGui.TableSetColumnIndex(1);
         ImGui.BeginDisabled(_mappingRuntimeState.IsEnabled);
         DrawDmlAdapterCombo(metrics.ReserveWidth);
