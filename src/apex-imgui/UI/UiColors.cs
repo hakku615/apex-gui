@@ -23,11 +23,6 @@ internal static class UiColors
     public static readonly Color WeaponPreviewTargetBox = ColorFromRgb(0xFF0000);  // Office 标准色「红色」
     public static readonly Color PreviewStatusText = ColorFromRgb(0xC0C0C0);       // WdColor.wdColorGray25
 
-    // 范围预览窗口（WinForms GDI+）
-    public static readonly Color RangePreviewBackground = ColorFromRgb(0x000000);   // Office 主题「深色 1」
-    public static readonly Color RangePreviewOuterRing = ColorFromRgb(0x00B0F0);    // Office 标准色「浅蓝」
-    public static readonly Color RangePreviewInnerRing = ColorFromRgb(0xED7D31);    // Office 主题 Accent 2
-
     private static Vector4 Rgb(int rgb) => new(
         ((rgb >> 16) & 0xFF) / 255f,
         ((rgb >> 8) & 0xFF) / 255f,

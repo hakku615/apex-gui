@@ -35,7 +35,6 @@ public sealed partial class MainWindow
         {
             SetupSnapSettingsGridColumns(layout);
             DrawSnapRangeRow(layout, selectedModelSize, snapOuterRangeMax);
-            DrawSnapStrengthRow(layout);
             DrawSnapExtraRow(layout);
             DrawSnapStrengthRampRow(layout);
 
@@ -56,11 +55,9 @@ public sealed partial class MainWindow
         var rangeInputWidth = ImGui.CalcTextSize("0000").X + topPanelStyle.FramePadding.X * 2f;
         var strengthInputWidth = rangeInputWidth + ImGui.GetFrameHeight() * 2f + topPanelStyle.ItemInnerSpacing.X * 2f;
         var labelWidth = MeasureMaxTextWidth(
-                             "内圈范围",
                              "外圈范围",
                              "内圈强度",
                              "外圈强度",
-                             "腰射强度系数",
                              "垂直强度系数")
                          + topPanelStyle.CellPadding.X * 2f;
         var lastLabelWidth = MeasureMaxTextWidth("起始强度", "吸附高度") + topPanelStyle.CellPadding.X * 2f;
@@ -98,62 +95,27 @@ public sealed partial class MainWindow
         ImGui.TableNextRow();
         ImGui.TableSetColumnIndex(0);
         ImGui.AlignTextToFramePadding();
-        ImGui.TextUnformatted("内圈范围");
-        if (ImGui.IsItemHovered())
-        {
-            ImGui.SetTooltip("内圈吸附半径，目标进入该范围后按内圈强度进行吸附。\n单位：像素，需小于等于外圈范围。");
-        }
-
-        ImGui.TableSetColumnIndex(1);
-        ImGui.SetNextItemWidth(layout.RangeInputWidth);
-        var snapInnerRange = _homeViewState.SnapInnerRange;
-        if (ImGui.InputInt("##SnapInnerRange", ref snapInnerRange, 0, 0))
-        {
-            _homeViewState.SnapInnerRange = Math.Clamp(snapInnerRange, 1, _homeViewState.SnapOuterRange);
-            TryWriteIntToCurrentConfig(SnapConfigCatalog.InnerRangeKey, _homeViewState.SnapInnerRange);
-            PushAimAssistConfig();
-        }
-
-        ImGui.TableSetColumnIndex(2);
-        ImGui.AlignTextToFramePadding();
         ImGui.TextUnformatted("外圈范围");
         if (ImGui.IsItemHovered())
         {
             ImGui.SetTooltip("外圈吸附半径，目标进入该范围即开始吸附。\n单位：像素，上限取决于模型尺寸与显示高度。");
         }
 
-        ImGui.TableSetColumnIndex(3);
+        ImGui.TableSetColumnIndex(1);
         ImGui.SetNextItemWidth(layout.RangeInputWidth);
         var snapOuterRange = _homeViewState.SnapOuterRange;
         if (ImGui.InputInt("##SnapOuterRange", ref snapOuterRange, 0, 0))
         {
             _homeViewState.SnapOuterRange = Math.Clamp(snapOuterRange, selectedModelSize, snapOuterRangeMax);
-            _homeViewState.SnapInnerRange = Math.Clamp(_homeViewState.SnapInnerRange, 1, _homeViewState.SnapOuterRange);
             TryWriteIntToCurrentConfig(SnapConfigCatalog.OuterRangeKey, _homeViewState.SnapOuterRange);
-            TryWriteIntToCurrentConfig(SnapConfigCatalog.InnerRangeKey, _homeViewState.SnapInnerRange);
             PushAimAssistConfig();
             SyncSmartCoreVisionPipeline();
         }
 
-        ImGui.TableSetColumnIndex(5);
-        var snapRangePreviewWindowOpen = IsSnapRangePreviewWindowOpen();
-        ImGui.BeginDisabled(snapRangePreviewWindowOpen);
-        if (ImGui.Button("范围预览##SnapRangePreviewWindowButton", new Vector2(layout.ExtraInputWidth, 0f)))
-        {
-            OpenSnapRangePreviewWindow();
-        }
-        ImGui.EndDisabled();
-    }
-
-    private void DrawSnapStrengthRow(in SnapSettingsLayout layout)
-    {
-        ImGui.TableNextRow();
-        ImGui.TableNextRow();
-
-        ImGui.TableSetColumnIndex(0);
+        ImGui.TableSetColumnIndex(2);
         ImGui.AlignTextToFramePadding();
         ImGui.TextUnformatted("内圈强度");
-        ImGui.TableSetColumnIndex(1);
+        ImGui.TableSetColumnIndex(3);
         ImGui.SetNextItemWidth(layout.StrengthInputWidth);
         DrawClampedConfigFloatInput(
             "##SnapInnerStrength",
@@ -163,29 +125,16 @@ public sealed partial class MainWindow
             0f,
             1f);
 
-        ImGui.TableSetColumnIndex(2);
+        ImGui.TableSetColumnIndex(4);
         ImGui.AlignTextToFramePadding();
         ImGui.TextUnformatted("外圈强度");
-        ImGui.TableSetColumnIndex(3);
+        ImGui.TableSetColumnIndex(5);
         ImGui.SetNextItemWidth(layout.StrengthInputWidth);
         DrawClampedConfigFloatInput(
             "##SnapOuterStrength",
             SnapConfigCatalog.OuterStrengthKey,
             _homeViewState.SnapOuterStrength,
             value => _homeViewState.SnapOuterStrength = value,
-            0f,
-            1f);
-
-        ImGui.TableSetColumnIndex(4);
-        ImGui.AlignTextToFramePadding();
-        ImGui.TextUnformatted("起始强度");
-        ImGui.TableSetColumnIndex(5);
-        ImGui.SetNextItemWidth(layout.ExtraInputWidth);
-        DrawClampedConfigFloatInput(
-            "##SnapStartStrength",
-            SnapConfigCatalog.StartStrengthKey,
-            _homeViewState.SnapStartStrength,
-            value => _homeViewState.SnapStartStrength = value,
             0f,
             1f);
     }
@@ -197,14 +146,14 @@ public sealed partial class MainWindow
 
         ImGui.TableSetColumnIndex(0);
         ImGui.AlignTextToFramePadding();
-        ImGui.TextUnformatted("腰射强度系数");
+        ImGui.TextUnformatted("起始强度");
         ImGui.TableSetColumnIndex(1);
-        ImGui.SetNextItemWidth(layout.ExtraInputWidth);
+        ImGui.SetNextItemWidth(layout.StrengthInputWidth);
         DrawClampedConfigFloatInput(
-            "##SnapHipfireStrengthFactor",
-            SnapConfigCatalog.HipfireStrengthFactorKey,
-            _homeViewState.SnapHipfireStrengthFactor,
-            value => _homeViewState.SnapHipfireStrengthFactor = value,
+            "##SnapStartStrength",
+            SnapConfigCatalog.StartStrengthKey,
+            _homeViewState.SnapStartStrength,
+            value => _homeViewState.SnapStartStrength = value,
             0f,
             1f);
 

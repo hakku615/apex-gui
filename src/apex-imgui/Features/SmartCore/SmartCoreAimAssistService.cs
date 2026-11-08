@@ -29,12 +29,10 @@ internal readonly record struct AimAssistParams(
     bool IsEnabled,
     SnapMode SnapMode,
     int SnapOuterRange,
-    int SnapInnerRange,
     float SnapOuterStrength,
     float SnapInnerStrength,
     float SnapStartStrength,
     float SnapVerticalStrengthFactor,
-    float SnapHipfireStrengthFactor,
     float SnapHeight,
     float SnapStrengthRampTime,
     int SnapInnerInterpolationTypeIndex);
@@ -67,12 +65,10 @@ internal readonly record struct SmartCoreAimAssistConfigState(
             IsEnabled: false,
             SnapMode: SnapMode.Fire,
             SnapOuterRange: 1,
-            SnapInnerRange: 1,
             SnapOuterStrength: 0f,
             SnapInnerStrength: 0f,
             SnapStartStrength: 0f,
             SnapVerticalStrengthFactor: 0f,
-            SnapHipfireStrengthFactor: 0f,
             SnapHeight: 0f,
             SnapStrengthRampTime: 0f,
             SnapInnerInterpolationTypeIndex: 0),
@@ -99,12 +95,10 @@ internal readonly struct SmartCoreAimAssistContext
     public readonly bool IsEnabled;
     public readonly SnapMode SnapMode;
     public readonly int SnapOuterRange;
-    public readonly int SnapInnerRange;
     public readonly float SnapOuterStrength;
     public readonly float SnapInnerStrength;
     public readonly float SnapStartStrength;
     public readonly float SnapVerticalStrengthFactor;
-    public readonly float SnapHipfireStrengthFactor;
     public readonly float SnapHeight;
     public readonly int SnapInnerInterpolationTypeIndex;
     public readonly int AimBindingIndex;
@@ -118,12 +112,10 @@ internal readonly struct SmartCoreAimAssistContext
         bool isEnabled,
         SnapMode snapMode,
         int snapOuterRange,
-        int snapInnerRange,
         float snapOuterStrength,
         float snapInnerStrength,
         float snapStartStrength,
         float snapVerticalStrengthFactor,
-        float snapHipfireStrengthFactor,
         float snapHeight,
         int snapInnerInterpolationTypeIndex,
         int aimBindingIndex,
@@ -136,12 +128,10 @@ internal readonly struct SmartCoreAimAssistContext
         IsEnabled = isEnabled;
         SnapMode = snapMode;
         SnapOuterRange = snapOuterRange;
-        SnapInnerRange = snapInnerRange;
         SnapOuterStrength = snapOuterStrength;
         SnapInnerStrength = snapInnerStrength;
         SnapStartStrength = snapStartStrength;
         SnapVerticalStrengthFactor = snapVerticalStrengthFactor;
-        SnapHipfireStrengthFactor = snapHipfireStrengthFactor;
         SnapHeight = snapHeight;
         SnapInnerInterpolationTypeIndex = snapInnerInterpolationTypeIndex;
         AimBindingIndex = aimBindingIndex;
@@ -222,10 +212,9 @@ internal sealed class SmartCoreStickMapper
             return false;
         }
 
-        var outerRange = Math.Max(1, context.SnapOuterRange);
-        var innerRange = Math.Clamp(context.SnapInnerRange, 1, outerRange);
         var outerRadiusModel = MathF.Min(box.InputWidth, box.InputHeight) * 0.5f;
-        var innerRadiusModel = outerRadiusModel * (innerRange / (float)outerRange);
+        // 小圈直径跟随最优先吸附目标：直径 = 目标框宽度 * 3
+        var innerRadiusModel = MathF.Max(0f, box.W) * 1.5f;
         if (distance > outerRadiusModel)
         {
             return false;
@@ -264,8 +253,6 @@ internal sealed class SmartCoreStickMapper
                 // Hipfire keeps inner-ring strength once outside inner range.
                 strength = innerStrength;
             }
-
-            strength *= Math.Clamp(context.SnapHipfireStrengthFactor, 0f, 1f);
         }
 
         strength *= Math.Clamp(context.FireStrengthRampMultiplier, 0f, 1f);

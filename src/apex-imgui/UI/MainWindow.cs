@@ -183,14 +183,13 @@ public sealed partial class MainWindow : GameWindow
         drawList.AddLine(new Vector2(plotMin.X, plotMax.Y), new Vector2(plotMax.X, plotMax.Y), axisColor, 1.5f);
         drawList.AddLine(new Vector2(plotMin.X, plotMin.Y), new Vector2(plotMin.X, plotMax.Y), axisColor, 1.5f);
 
-        var innerRangeForPreview = Math.Max(1, _homeViewState.SnapInnerRange);
         var startStrengthForPreview = Math.Clamp(_homeViewState.SnapStartStrength, 0f, 1f);
         var innerStrengthForPreview = Math.Clamp(_homeViewState.SnapInnerStrength, 0f, 1f);
         var outerStrengthForPreview = Math.Clamp(_homeViewState.SnapOuterStrength, 0f, 1f);
 
         Vector2 MapToPlot(float x, float y)
         {
-            var nx = Math.Clamp(x / innerRangeForPreview, 0f, 1f);
+            var nx = Math.Clamp(x, 0f, 1f);
             var ny = Math.Clamp(y, 0f, 1f);
             return new Vector2(
                 plotMin.X + nx * (plotMax.X - plotMin.X),
@@ -198,8 +197,8 @@ public sealed partial class MainWindow : GameWindow
         }
 
         var lineStart = MapToPlot(0f, startStrengthForPreview);
-        var lineEnd = MapToPlot(innerRangeForPreview, innerStrengthForPreview);
-        var highlightPoint = MapToPlot(innerRangeForPreview, outerStrengthForPreview);
+        var lineEnd = MapToPlot(1f, innerStrengthForPreview);
+        var highlightPoint = MapToPlot(1f, outerStrengthForPreview);
 
         var interpolationTypeIndexForPreview = _homeViewState.SnapInnerInterpolationTypeIndex >= 0 && _homeViewState.SnapInnerInterpolationTypeIndex < AimAssistOptionCatalog.SnapInnerInterpolationTypeOptions.Length
             ? _homeViewState.SnapInnerInterpolationTypeIndex
@@ -211,8 +210,8 @@ public sealed partial class MainWindow : GameWindow
             var t1 = (i + 1) / (float)interpolationSegments;
             var curveT0 = SnapInterpolation.EvaluateNormalized(t0, interpolationTypeIndexForPreview);
             var curveT1 = SnapInterpolation.EvaluateNormalized(t1, interpolationTypeIndexForPreview);
-            var x0 = innerRangeForPreview * t0;
-            var x1 = innerRangeForPreview * t1;
+            var x0 = t0;
+            var x1 = t1;
             var y0 = startStrengthForPreview + (innerStrengthForPreview - startStrengthForPreview) * curveT0;
             var y1 = startStrengthForPreview + (innerStrengthForPreview - startStrengthForPreview) * curveT1;
             drawList.AddLine(MapToPlot(x0, y0), MapToPlot(x1, y1), lineColor, 2.0f);
@@ -221,7 +220,7 @@ public sealed partial class MainWindow : GameWindow
         drawList.AddCircleFilled(highlightPoint, 4.0f, pointColor);
         drawList.AddText(new Vector2(plotMin.X + 4f, plotMin.Y + 2f), axisColor, "1.0");
         drawList.AddText(new Vector2(plotMin.X + 4f, plotMax.Y - ImGui.GetTextLineHeight() - 2f), axisColor, "0");
-        var xAxisTickLabel = innerRangeForPreview.ToString();
+        var xAxisTickLabel = "内圈";
         var xAxisTickLabelWidth = ImGui.CalcTextSize(xAxisTickLabel).X;
         drawList.AddText(new Vector2(plotMax.X - xAxisTickLabelWidth - 10f, plotMax.Y - ImGui.GetTextLineHeight() - 2f), axisColor, xAxisTickLabel);
     }
@@ -628,7 +627,6 @@ protected override void OnResize(ResizeEventArgs e)
 
     protected override void OnUnload()
     {
-        CloseSnapRangePreviewWindow();
         CloseSmartCorePreviewWindow();
 
         StopVisionPipeline();
@@ -814,12 +812,10 @@ protected override void OnResize(ResizeEventArgs e)
                 _mappingRuntimeState.IsEnabled,
                 AimAssistOptionCatalog.ResolveSnapMode(_homeViewState.SnapModeIndex),
                 _homeViewState.SnapOuterRange,
-                _homeViewState.SnapInnerRange,
                 _homeViewState.SnapOuterStrength,
                 _homeViewState.SnapInnerStrength,
                 _homeViewState.SnapStartStrength,
                 _homeViewState.SnapVerticalStrengthFactor,
-                _homeViewState.SnapHipfireStrengthFactor,
                 _homeViewState.SnapHeight,
                 _homeViewState.SnapStrengthRampTime,
                 _homeViewState.SnapInnerInterpolationTypeIndex),

@@ -13,6 +13,43 @@ internal sealed class ConfigRepository
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
+    // 保存时按当前 schema 裁剪：只保留程序实际读写的键，历史遗留键不会再写回文件。
+    private static readonly HashSet<string> KnownTopLevelKeys = new(StringComparer.Ordinal)
+    {
+        WeaponTemplateCatalog.GameConfigKey,
+        OnnxModelConfigLoader.ModelConfigKey,
+        SnapConfigCatalog.SnapModeKey,
+        SnapConfigCatalog.OuterRangeKey,
+        SnapConfigCatalog.OuterStrengthKey,
+        SnapConfigCatalog.InnerStrengthKey,
+        SnapConfigCatalog.StartStrengthKey,
+        SnapConfigCatalog.VerticalStrengthFactorKey,
+        SnapConfigCatalog.HeightKey,
+        SnapConfigCatalog.StrengthRampTimeKey,
+        SnapConfigCatalog.InnerInterpolationTypeKey,
+        SpecialWeaponLogicCatalog.RootKey,
+        SpecialWeaponLogicCatalog.RapidFireStrategyKey,
+        SpecialWeaponLogicCatalog.RapidFireHzKey,
+        BindingConfigCatalog.AimBindingKey,
+        BindingConfigCatalog.FireBindingKey,
+        BindingConfigCatalog.VoiceBindingKey,
+        BindingConfigCatalog.VoiceCustomKeyKey,
+        BindingConfigCatalog.TouchpadLeftBindingKey,
+        BindingConfigCatalog.TouchpadRightBindingKey,
+        BindingConfigCatalog.TouchpadLeftCustomKeyKey,
+        BindingConfigCatalog.TouchpadRightCustomKeyKey,
+        MacroConfigCatalog.ConfigKey
+    };
+
+    private static readonly HashSet<string> KnownMacroKeys = new(MacroConfigCatalog.NodeKeys, StringComparer.Ordinal);
+
+    private static readonly HashSet<string> KnownWeaponListKeys = new(StringComparer.Ordinal)
+    {
+        SpecialWeaponLogicCatalog.AimSnapWeaponListKey,
+        SpecialWeaponLogicCatalog.RapidFireWeaponListKey,
+        SpecialWeaponLogicCatalog.ReleaseFireWeaponListKey
+    };
+
     public ConfigRepository(string configsDirectoryPath)
     {
         _configsDirectoryPath = configsDirectoryPath;
@@ -160,7 +197,44 @@ internal sealed class ConfigRepository
 
     public void SaveJsonObject(string path, JsonObject root)
     {
+        PruneUnknownKeys(root);
         File.WriteAllText(path, root.ToJsonString(IndentedJsonOptions) + Environment.NewLine);
+    }
+
+    private static void PruneUnknownKeys(JsonObject root)
+    {
+        RemoveUnknownKeys(root, KnownTopLevelKeys);
+
+        if (root[MacroConfigCatalog.ConfigKey] is JsonObject macro)
+        {
+            RemoveUnknownKeys(macro, KnownMacroKeys);
+        }
+
+        if (root[SpecialWeaponLogicCatalog.RootKey] is JsonObject specialWeaponLogic)
+        {
+            foreach (var key in specialWeaponLogic.Select(pair => pair.Key).ToArray())
+            {
+                // 旧版曾把列表直接放在 specialWeaponLogic 根上；现在只接受按游戏分组的对象。
+                if (specialWeaponLogic[key] is not JsonObject gameNode)
+                {
+                    specialWeaponLogic.Remove(key);
+                    continue;
+                }
+
+                RemoveUnknownKeys(gameNode, KnownWeaponListKeys);
+            }
+        }
+    }
+
+    private static void RemoveUnknownKeys(JsonObject node, HashSet<string> knownKeys)
+    {
+        foreach (var key in node.Select(pair => pair.Key).ToArray())
+        {
+            if (!knownKeys.Contains(key))
+            {
+                node.Remove(key);
+            }
+        }
     }
 
     public string? TryReadString(string path, string key)

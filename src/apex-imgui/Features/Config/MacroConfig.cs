@@ -38,6 +38,16 @@ internal static class MacroConfigCatalog
     private const string ActionBindingConfigKey = "actionBinding";
     private const string ActionDurationMsConfigKey = "actionDurationMs";
 
+    public static readonly string[] NodeKeys =
+    {
+        EnabledConfigKey,
+        TriggerModeConfigKey,
+        TriggerBindingConfigKey,
+        DelayMsConfigKey,
+        ActionBindingConfigKey,
+        ActionDurationMsConfigKey
+    };
+
     public static readonly string[] TriggerModeOptions = { "按下", "按住" };
 
     public static MacroEntryState CreateDefault() => new();
