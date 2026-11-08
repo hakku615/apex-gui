@@ -16,10 +16,6 @@ public sealed partial class MainWindow
     private readonly object _smartCorePreviewWindowLock = new();
     private System.Windows.Forms.Form? _smartCorePreviewWindow;
     private bool _smartCorePreviewShuttingDown;
-    private readonly object _snapRangePreviewWindowLock = new();
-    private System.Windows.Forms.Form? _snapRangePreviewWindow;
-    private bool _snapRangePreviewWindowVisible;
-    private bool _snapRangePreviewShuttingDown;
 
     private void UpdateSmartCorePreviewCaptureDemand(bool enabled)
     {
@@ -213,13 +209,16 @@ public sealed partial class MainWindow
                         if (cachedBitmap is null || cachedBitmap.Width != frameWidth || cachedBitmap.Height != frameHeight)
                         {
                             cachedBitmap?.Dispose();
-                            cachedBitmap = new System.Drawing.Bitmap(frameWidth, frameHeight, PixelFormat.Format32bppArgb);
+                            // 32bppRgb ignores the unused 4th byte: OBS' Spout texture carries
+                            // alpha 0, and only this preview ever consumed alpha, so the capture
+                            // side no longer has to force it opaque.
+                            cachedBitmap = new System.Drawing.Bitmap(frameWidth, frameHeight, PixelFormat.Format32bppRgb);
                         }
 
                         var bitmapData = cachedBitmap.LockBits(
                             new System.Drawing.Rectangle(0, 0, frameWidth, frameHeight),
                             ImageLockMode.WriteOnly,
-                            PixelFormat.Format32bppArgb);
+                            PixelFormat.Format32bppRgb);
                         try
                         {
                             Marshal.Copy(frameBuffer, 0, bitmapData.Scan0, frameBuffer.Length);
@@ -395,138 +394,6 @@ public sealed partial class MainWindow
         lock (_smartCorePreviewWindowLock)
         {
             return _smartCorePreviewWindow is not null && !_smartCorePreviewWindow.IsDisposed && _smartCorePreviewWindow.Visible;
-        }
-    }
-
-    private void OpenSnapRangePreviewWindow()
-    {
-        lock (_snapRangePreviewWindowLock)
-        {
-            if (_snapRangePreviewWindow is not null && !_snapRangePreviewWindow.IsDisposed)
-            {
-                _snapRangePreviewWindow.BeginInvoke(new Action(() =>
-                {
-                    _snapRangePreviewWindowVisible = true;
-                    _snapRangePreviewWindow.Show();
-                    _snapRangePreviewWindow.Activate();
-                    _snapRangePreviewWindow.BringToFront();
-                }));
-                return;
-            }
-
-            var previewWindowThread = new Thread(() =>
-            {
-                using var form = new System.Windows.Forms.Form
-                {
-                    Text = string.Empty,
-                    StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen,
-                    ClientSize = new System.Drawing.Size(Math.Max(1, _homeViewState.SnapOuterRange), Math.Max(1, _homeViewState.SnapOuterRange)),
-                    TopMost = true,
-                    FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog,
-                    MaximizeBox = false
-                };
-                form.BackColor = UiColors.RangePreviewBackground;
-                form.ShowInTaskbar = false;
-                var refreshTimer = new System.Windows.Forms.Timer { Interval = 50 };
-                refreshTimer.Tick += (_, _) =>
-                {
-                    var outer = Math.Max(1, _homeViewState.SnapOuterRange);
-                    var expectedSize = new System.Drawing.Size(outer, outer);
-                    if (form.ClientSize != expectedSize)
-                    {
-                        form.ClientSize = expectedSize;
-                    }
-
-                    form.Invalidate();
-                };
-
-                form.Paint += (_, e) =>
-                {
-                    e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
-                    var outer = Math.Max(1, _homeViewState.SnapOuterRange);
-                    var inner = Math.Clamp(_homeViewState.SnapInnerRange, 0, outer);
-                    var drawDiameter = Math.Max(2, Math.Min(form.ClientSize.Width, form.ClientSize.Height) - 2);
-                    var centerX = form.ClientSize.Width / 2f;
-                    var centerY = form.ClientSize.Height / 2f;
-                    var outerRadius = drawDiameter / 2f;
-                    var innerRadius = outerRadius * (inner / (float)outer);
-
-                    using var outerPen = new System.Drawing.Pen(UiColors.RangePreviewOuterRing, 2f);
-                    using var innerPen = new System.Drawing.Pen(UiColors.RangePreviewInnerRing, 2f);
-
-                    var outerRect = new System.Drawing.RectangleF(
-                        centerX - outerRadius,
-                        centerY - outerRadius,
-                        outerRadius * 2f,
-                        outerRadius * 2f);
-                    var innerRect = new System.Drawing.RectangleF(
-                        centerX - innerRadius,
-                        centerY - innerRadius,
-                        innerRadius * 2f,
-                        innerRadius * 2f);
-
-                    e.Graphics.DrawEllipse(outerPen, outerRect);
-                    e.Graphics.DrawEllipse(innerPen, innerRect);
-                };
-
-                form.FormClosing += (_, e) =>
-                {
-                    if (!_snapRangePreviewShuttingDown && e.CloseReason == System.Windows.Forms.CloseReason.UserClosing)
-                    {
-                        e.Cancel = true;
-                        _snapRangePreviewWindowVisible = false;
-                        form.Hide();
-                    }
-                };
-
-                form.FormClosed += (_, _) =>
-                {
-                    refreshTimer.Stop();
-                    refreshTimer.Dispose();
-                    lock (_snapRangePreviewWindowLock)
-                    {
-                        _snapRangePreviewWindowVisible = false;
-                        _snapRangePreviewWindow = null;
-                    }
-                };
-
-                lock (_snapRangePreviewWindowLock)
-                {
-                    _snapRangePreviewWindow = form;
-                }
-
-                refreshTimer.Start();
-                _snapRangePreviewWindowVisible = true;
-                form.Show();
-                System.Windows.Forms.Application.Run(form);
-            })
-            {
-                IsBackground = true,
-                Name = "SnapRangePreviewWindowThread"
-            };
-            previewWindowThread.SetApartmentState(ApartmentState.STA);
-            previewWindowThread.Start();
-        }
-    }
-
-    private bool IsSnapRangePreviewWindowOpen()
-    {
-        lock (_snapRangePreviewWindowLock)
-        {
-            return _snapRangePreviewWindowVisible && _snapRangePreviewWindow is not null && !_snapRangePreviewWindow.IsDisposed;
-        }
-    }
-
-    private void CloseSnapRangePreviewWindow()
-    {
-        lock (_snapRangePreviewWindowLock)
-        {
-            if (_snapRangePreviewWindow is not null && !_snapRangePreviewWindow.IsDisposed)
-            {
-                _snapRangePreviewShuttingDown = true;
-                _snapRangePreviewWindow.BeginInvoke(new Action(() => _snapRangePreviewWindow.Close()));
-            }
         }
     }
 }

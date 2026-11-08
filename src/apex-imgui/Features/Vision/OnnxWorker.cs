@@ -58,6 +58,16 @@ internal sealed class OnnxWorker : IDisposable
     private IAimAssistDetectionSink? _detectionConsumer;
     private OnnxDebugBox[] _latestBoxes = Array.Empty<OnnxDebugBox>();
     private float[] _preprocessBuffer = Array.Empty<float>();
+    private int[] _xMap = Array.Empty<int>();
+    private int _xMapSrcW = -1;
+    private int _xMapDstW = -1;
+
+    // NMS scratch buffers, reused across frames: both parse paths and ApplyNms run on this
+    // worker's single thread, so there is no cross-thread sharing to guard against.
+    private readonly List<(float x, float y, float w, float h, float score, float obj, float classScore)> _rawCandidates = new();
+    private readonly List<(float x, float y, float w, float h, float score)> _nmsCandidates = new();
+    private readonly List<(float x, float y, float w, float h, float score)> _nmsKept = new();
+    private OnnxDebugBox[] _nmsBoxBuffer = Array.Empty<OnnxDebugBox>();
 
     private readonly List<double> _windowSamples = new(256);
     private DateTime _windowStartUtc = DateTime.UtcNow;
@@ -286,39 +296,63 @@ internal sealed class OnnxWorker : IDisposable
         return "NHWC";
     }
 
-    private static float[] Preprocess(byte[] bgra, int srcW, int srcH, int dstW, int dstH, string layout, ref float[] buffer)
+    private float[] Preprocess(byte[] bgra, int srcW, int srcH, int dstW, int dstH, string layout, ref float[] buffer)
     {
+        // 255 is a constant but a runtime float divide; the reciprocal multiply is exact
+        // for every byte value in [0,255] at single precision.
+        const float Inv255 = 1f / 255f;
+
         var requiredLength = dstW * dstH * 3;
         if (buffer.Length != requiredLength)
         {
             buffer = new float[requiredLength];
         }
 
-        var data = buffer;
-        for (var y = 0; y < dstH; y++)
+        // The nearest-neighbour column map only changes when the region or model input
+        // size changes, so keep it cached instead of doing an integer divide per pixel.
+        if (_xMapSrcW != srcW || _xMapDstW != dstW || _xMap.Length != dstW)
         {
-            var sy = y * srcH / dstH;
+            _xMap = new int[dstW];
             for (var x = 0; x < dstW; x++)
             {
-                var sx = x * srcW / dstW;
-                var srcIndex = (sy * srcW + sx) * 4;
-                var b = bgra[srcIndex + 0] / 255f;
-                var g = bgra[srcIndex + 1] / 255f;
-                var r = bgra[srcIndex + 2] / 255f;
+                _xMap[x] = x * srcW / dstW;
+            }
 
-                if (layout == "NCHW")
+            _xMapSrcW = srcW;
+            _xMapDstW = dstW;
+        }
+
+        var xMap = _xMap;
+        var data = buffer;
+        var planeSize = dstW * dstH;
+
+        if (layout == "NCHW")
+        {
+            for (var y = 0; y < dstH; y++)
+            {
+                var srcRow = (y * srcH / dstH) * srcW * 4;
+                var pixel = y * dstW;
+                for (var x = 0; x < dstW; x++, pixel++)
                 {
-                    var pixel = y * dstW + x;
-                    data[pixel] = r;
-                    data[dstW * dstH + pixel] = g;
-                    data[2 * dstW * dstH + pixel] = b;
+                    var srcIndex = srcRow + xMap[x] * 4;
+                    data[pixel] = bgra[srcIndex + 2] * Inv255;
+                    data[planeSize + pixel] = bgra[srcIndex + 1] * Inv255;
+                    data[2 * planeSize + pixel] = bgra[srcIndex] * Inv255;
                 }
-                else
+            }
+        }
+        else
+        {
+            for (var y = 0; y < dstH; y++)
+            {
+                var srcRow = (y * srcH / dstH) * srcW * 4;
+                var pixel = y * dstW * 3;
+                for (var x = 0; x < dstW; x++, pixel += 3)
                 {
-                    var pixel = (y * dstW + x) * 3;
-                    data[pixel + 0] = r;
-                    data[pixel + 1] = g;
-                    data[pixel + 2] = b;
+                    var srcIndex = srcRow + xMap[x] * 4;
+                    data[pixel] = bgra[srcIndex + 2] * Inv255;
+                    data[pixel + 1] = bgra[srcIndex + 1] * Inv255;
+                    data[pixel + 2] = bgra[srcIndex] * Inv255;
                 }
             }
         }
@@ -326,7 +360,7 @@ internal sealed class OnnxWorker : IDisposable
         return data;
     }
 
-    private static int CountDetections(
+    private int CountDetections(
         IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs,
         YoloOutputFormat outputFormat,
         int inputWidth,
@@ -375,7 +409,7 @@ internal sealed class OnnxWorker : IDisposable
         return 0;
     }
 
-    private static bool TryParseDetections(
+    private bool TryParseDetections(
         float[] values,
         int[] dims,
         YoloOutputFormat outputFormat,
@@ -412,7 +446,7 @@ internal sealed class OnnxWorker : IDisposable
         };
     }
 
-    private static bool TryParseYoloV5Detections(
+    private bool TryParseYoloV5Detections(
         float[] values,
         int[] dims,
         int inputWidth,
@@ -450,7 +484,8 @@ internal sealed class OnnxWorker : IDisposable
             return false;
         }
 
-        var candidateBoxes = new List<(float x, float y, float w, float h, float score, float obj, float classScore)>();
+        var candidateBoxes = _rawCandidates;
+        candidateBoxes.Clear();
         for (var i = 0; i < rows; i++)
         {
             int baseIndex;
@@ -497,13 +532,17 @@ internal sealed class OnnxWorker : IDisposable
             candidateBoxes.Add((Read(0), Read(1), Math.Abs(Read(2)), Math.Abs(Read(3)), score, obj, bestClassScore));
         }
 
-        var nmsCandidates = candidateBoxes
-            .Select(box => (box.x, box.y, box.w, box.h, box.score))
-            .ToList();
+        var nmsCandidates = _nmsCandidates;
+        nmsCandidates.Clear();
+        foreach (var box in candidateBoxes)
+        {
+            nmsCandidates.Add((box.x, box.y, box.w, box.h, box.score));
+        }
+
         return ApplyNms(nmsCandidates, iouThres, inputWidth, inputHeight, out count, out boxes);
     }
 
-    private static bool TryParseYoloV8Detections(
+    private bool TryParseYoloV8Detections(
         float[] values,
         int[] dims,
         int inputWidth,
@@ -521,7 +560,8 @@ internal sealed class OnnxWorker : IDisposable
             return false;
         }
 
-        var candidateBoxes = new List<(float x, float y, float w, float h, float score)>();
+        var candidateBoxes = _nmsCandidates;
+        candidateBoxes.Clear();
         for (var i = 0; i < rows; i++)
         {
             var baseIndex = transposed ? i : i * cols;
@@ -600,7 +640,7 @@ internal sealed class OnnxWorker : IDisposable
         return rows > 0;
     }
 
-    private static bool ApplyNms(
+    private bool ApplyNms(
         List<(float x, float y, float w, float h, float score)> candidateBoxes,
         float iouThres,
         int inputWidth,
@@ -616,7 +656,8 @@ internal sealed class OnnxWorker : IDisposable
         }
 
         candidateBoxes.Sort((a, b) => b.score.CompareTo(a.score));
-        var kept = new List<(float x, float y, float w, float h, float score)>();
+        var kept = _nmsKept;
+        kept.Clear();
         foreach (var box in candidateBoxes)
         {
             var suppressed = false;
@@ -638,7 +679,25 @@ internal sealed class OnnxWorker : IDisposable
         }
 
         count = kept.Count;
-        boxes = kept.Select(box => new OnnxDebugBox(inputWidth, inputHeight, box.x, box.y, box.w, box.h, box.score)).ToArray();
+        if (_nmsBoxBuffer.Length < count)
+        {
+            _nmsBoxBuffer = new OnnxDebugBox[count];
+        }
+
+        for (var i = 0; i < count; i++)
+        {
+            var box = kept[i];
+            _nmsBoxBuffer[i] = new OnnxDebugBox(inputWidth, inputHeight, box.x, box.y, box.w, box.h, box.score);
+        }
+
+        // The buffer is reused across frames and handed out as-is, so stale slots from a busier
+        // previous frame must be cleared or consumers would see boxes that no longer exist.
+        if (_nmsBoxBuffer.Length > count)
+        {
+            Array.Clear(_nmsBoxBuffer, count, _nmsBoxBuffer.Length - count);
+        }
+
+        boxes = _nmsBoxBuffer;
         return true;
     }
 

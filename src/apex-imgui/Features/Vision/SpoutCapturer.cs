@@ -12,10 +12,10 @@ internal sealed class SpoutCapturer : IScreenCapturer
     private readonly ID3D11DeviceContext _context;
     private SpoutReceiver _receiver;
     private readonly Stopwatch _disconnectedFor = Stopwatch.StartNew();
-    private byte[] _previousFrame = Array.Empty<byte>();
     private readonly string _senderName;
     private readonly object _regionLock = new();
     private byte[] _frameBuffer = Array.Empty<byte>();
+    private byte[] _previousFrame = Array.Empty<byte>();
     private byte[] _weaponRoiBuffer = Array.Empty<byte>();
     private ID3D11Texture2D? _frameStaging;
     private ID3D11Texture2D? _weaponRoiStaging;
@@ -173,24 +173,12 @@ internal sealed class SpoutCapturer : IScreenCapturer
                 return false;
             }
 
-            CopyRegionToBuffer(senderTexture, frameStaging, captureLeft, captureTop, captureWidth, captureHeight, frameBuffer);
-            ForceOpaque(frameBuffer);
-
-            // Always take a fresh copy, then skip only when the picture is byte-for-byte identical:
-            // the sender keeps its texture between updates, so re-running inference on a duplicate
-            // would just burn the GPU without changing the result.
-            var frameSpan = frameBuffer.AsSpan();
-            if (_previousFrame.Length == frameBuffer.Length && frameSpan.SequenceEqual(_previousFrame))
+            // OBS re-sends its texture every canvas frame, so the same picture comes back many
+            // times per second; inference is only worth running when the region actually changed.
+            if (!CopyRegionToBuffer(senderTexture, frameStaging, captureLeft, captureTop, captureWidth, captureHeight, frameBuffer))
             {
                 return false;
             }
-
-            if (_previousFrame.Length != frameBuffer.Length)
-            {
-                _previousFrame = new byte[frameBuffer.Length];
-            }
-
-            Buffer.BlockCopy(frameBuffer, 0, _previousFrame, 0, frameBuffer.Length);
 
             frameData = frameBuffer;
             width = captureWidth;
@@ -300,16 +288,22 @@ internal sealed class SpoutCapturer : IScreenCapturer
         try
         {
             var sourcePointer = (byte*)mapped.DataPointer;
-            for (var y = 0; y < height; y++)
+            // Pointer writes instead of three bounds-checked array stores per pixel; the buffer
+            // is pinned for the whole row loop so no per-row GC handle churn either.
+            fixed (byte* destinationPointer = destination)
             {
-                var sourceRow = sourcePointer + y * mapped.RowPitch;
-                var destinationRow = y * width * 3;
-                for (var x = 0; x < width; x++)
+                for (var y = 0; y < height; y++)
                 {
-                    var pixelOffset = x * 4;
-                    destination[destinationRow + x * 3 + 0] = sourceRow[pixelOffset + 2];
-                    destination[destinationRow + x * 3 + 1] = sourceRow[pixelOffset + 1];
-                    destination[destinationRow + x * 3 + 2] = sourceRow[pixelOffset + 0];
+                    var sourceRow = sourcePointer + y * mapped.RowPitch;
+                    var destinationRow = destinationPointer + y * width * 3;
+                    for (var x = 0; x < width; x++)
+                    {
+                        var pixelOffset = x * 4;
+                        var destinationOffset = x * 3;
+                        destinationRow[destinationOffset + 0] = sourceRow[pixelOffset + 2];
+                        destinationRow[destinationOffset + 1] = sourceRow[pixelOffset + 1];
+                        destinationRow[destinationOffset + 2] = sourceRow[pixelOffset + 0];
+                    }
                 }
             }
         }
@@ -319,7 +313,7 @@ internal sealed class SpoutCapturer : IScreenCapturer
         }
     }
 
-    private void CopyRegionToBuffer(
+    private unsafe bool CopyRegionToBuffer(
         ID3D11Texture2D source,
         ID3D11Texture2D staging,
         int left,
@@ -335,10 +329,37 @@ internal sealed class SpoutCapturer : IScreenCapturer
         try
         {
             var rowBytes = width * 4;
-            for (var y = 0; y < height; y++)
+            var totalBytes = rowBytes * height;
+            var tight = (int)mapped.RowPitch == rowBytes;
+            var previous = _previousFrame;
+
+            if (previous.Length == totalBytes &&
+                (tight
+                    ? new ReadOnlySpan<byte>(mapped.DataPointer.ToPointer(), totalBytes).SequenceEqual(previous)
+                    : MappedRowsEqual(mapped.DataPointer, (int)mapped.RowPitch, rowBytes, height, previous)))
             {
-                Marshal.Copy(mapped.DataPointer + y * (int)mapped.RowPitch, destination, y * rowBytes, rowBytes);
+                return false;
             }
+
+            if (tight)
+            {
+                Marshal.Copy(mapped.DataPointer, destination, 0, totalBytes);
+            }
+            else
+            {
+                for (var y = 0; y < height; y++)
+                {
+                    Marshal.Copy(mapped.DataPointer + y * (int)mapped.RowPitch, destination, y * rowBytes, rowBytes);
+                }
+            }
+
+            if (previous.Length != totalBytes)
+            {
+                _previousFrame = new byte[totalBytes];
+            }
+
+            Buffer.BlockCopy(destination, 0, _previousFrame, 0, totalBytes);
+            return true;
         }
         finally
         {
@@ -346,14 +367,18 @@ internal sealed class SpoutCapturer : IScreenCapturer
         }
     }
 
-    private static void ForceOpaque(byte[] bgra)
+    private static unsafe bool MappedRowsEqual(nint dataPointer, int rowPitch, int rowBytes, int height, byte[] previous)
     {
-        // OBS' scene render target carries alpha 0 in the Spout texture; the preview draws with
-        // Format32bppArgb, so unnormalised alpha makes the captured picture invisible.
-        for (var i = 3; i < bgra.Length; i += 4)
+        for (var y = 0; y < height; y++)
         {
-            bgra[i] = 255;
+            var sourceRow = new ReadOnlySpan<byte>((dataPointer + y * rowPitch).ToPointer(), rowBytes);
+            if (!sourceRow.SequenceEqual(previous.AsSpan(y * rowBytes, rowBytes)))
+            {
+                return false;
+            }
         }
+
+        return true;
     }
 
     private static bool SenderExists(string senderName)

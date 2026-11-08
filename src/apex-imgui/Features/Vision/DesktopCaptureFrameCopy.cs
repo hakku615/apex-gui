@@ -51,17 +51,23 @@ internal static unsafe class DesktopCaptureFrameCopy
         }
 
         var srcPtr = (byte*)dataPointer;
-        for (var y = 0; y < roiHeight; y++)
+        // Same pointer-write form as the Spout path: three bounds-checked array stores per
+        // pixel are replaced by pinned pointer writes.
+        fixed (byte* weaponRoiPointer = weaponRoiBuffer)
         {
-            var sourceY = roiTop + y;
-            var sourceOffset = sourceY * rowPitch + roiLeft * 4;
-            var destination = y * roiWidth * 3;
-            for (var x = 0; x < roiWidth; x++)
+            for (var y = 0; y < roiHeight; y++)
             {
-                var pixelOffset = sourceOffset + x * 4;
-                weaponRoiBuffer[destination + x * 3 + 0] = srcPtr[pixelOffset + 2];
-                weaponRoiBuffer[destination + x * 3 + 1] = srcPtr[pixelOffset + 1];
-                weaponRoiBuffer[destination + x * 3 + 2] = srcPtr[pixelOffset + 0];
+                var sourceY = roiTop + y;
+                var sourceOffset = sourceY * rowPitch + roiLeft * 4;
+                var destinationRow = weaponRoiPointer + y * roiWidth * 3;
+                for (var x = 0; x < roiWidth; x++)
+                {
+                    var pixelOffset = sourceOffset + x * 4;
+                    var destinationOffset = x * 3;
+                    destinationRow[destinationOffset + 0] = srcPtr[pixelOffset + 2];
+                    destinationRow[destinationOffset + 1] = srcPtr[pixelOffset + 1];
+                    destinationRow[destinationOffset + 2] = srcPtr[pixelOffset + 0];
+                }
             }
         }
 
