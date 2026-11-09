@@ -14,9 +14,9 @@ internal sealed class HomeViewState
     public string TouchpadRightCustomKey { get; set; } = GamepadBindingCatalog.DefaultCustomKeyboardKeyName;
     public int SnapOuterRange { get; set; } = 1;
     public float SnapOuterStrength { get; set; }
-    public float SnapInnerStrength { get; set; }
+    public float SnapFarStrengthFactor { get; set; } = 0.5f;
+    public float SnapHipfireStrengthFactor { get; set; } = 1f;
     public float SnapStartStrength { get; set; }
-    public float SnapVerticalStrengthFactor { get; set; }
     public float SnapHeight { get; set; }
     public float SnapStrengthRampTime { get; set; }
     public int SnapInnerInterpolationTypeIndex { get; set; }
@@ -33,9 +33,9 @@ internal sealed class HomeViewState
     {
         SnapOuterRange = snapConfig.OuterRange;
         SnapOuterStrength = snapConfig.OuterStrength;
-        SnapInnerStrength = snapConfig.InnerStrength;
+        SnapFarStrengthFactor = snapConfig.FarStrengthFactor;
+        SnapHipfireStrengthFactor = snapConfig.HipfireStrengthFactor;
         SnapStartStrength = snapConfig.StartStrength;
-        SnapVerticalStrengthFactor = snapConfig.VerticalStrengthFactor;
         SnapHeight = snapConfig.Height;
         SnapStrengthRampTime = snapConfig.StrengthRampTime;
         SnapInnerInterpolationTypeIndex = snapConfig.InnerInterpolationTypeIndex;
@@ -66,9 +66,9 @@ internal sealed class HomeViewState
     public SnapSettingsState ToSnapSettings() => new(
         SnapOuterRange,
         SnapOuterStrength,
-        SnapInnerStrength,
+        SnapFarStrengthFactor,
+        SnapHipfireStrengthFactor,
         SnapStartStrength,
-        SnapVerticalStrengthFactor,
         SnapHeight,
         SnapStrengthRampTime,
         SnapInnerInterpolationTypeIndex);

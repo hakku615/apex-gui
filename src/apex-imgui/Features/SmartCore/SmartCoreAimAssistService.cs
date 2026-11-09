@@ -30,9 +30,9 @@ internal readonly record struct AimAssistParams(
     SnapMode SnapMode,
     int SnapOuterRange,
     float SnapOuterStrength,
-    float SnapInnerStrength,
+    float SnapFarStrengthFactor,
+    float SnapHipfireStrengthFactor,
     float SnapStartStrength,
-    float SnapVerticalStrengthFactor,
     float SnapHeight,
     float SnapStrengthRampTime,
     int SnapInnerInterpolationTypeIndex);
@@ -66,9 +66,9 @@ internal readonly record struct SmartCoreAimAssistConfigState(
             SnapMode: SnapMode.Fire,
             SnapOuterRange: 1,
             SnapOuterStrength: 0f,
-            SnapInnerStrength: 0f,
+            SnapFarStrengthFactor: 0f,
+            SnapHipfireStrengthFactor: 0f,
             SnapStartStrength: 0f,
-            SnapVerticalStrengthFactor: 0f,
             SnapHeight: 0f,
             SnapStrengthRampTime: 0f,
             SnapInnerInterpolationTypeIndex: 0),
@@ -96,9 +96,9 @@ internal readonly struct SmartCoreAimAssistContext
     public readonly SnapMode SnapMode;
     public readonly int SnapOuterRange;
     public readonly float SnapOuterStrength;
-    public readonly float SnapInnerStrength;
+    public readonly float SnapFarStrengthFactor;
+    public readonly float SnapHipfireStrengthFactor;
     public readonly float SnapStartStrength;
-    public readonly float SnapVerticalStrengthFactor;
     public readonly float SnapHeight;
     public readonly int SnapInnerInterpolationTypeIndex;
     public readonly int AimBindingIndex;
@@ -113,9 +113,9 @@ internal readonly struct SmartCoreAimAssistContext
         SnapMode snapMode,
         int snapOuterRange,
         float snapOuterStrength,
-        float snapInnerStrength,
+        float snapFarStrengthFactor,
+        float snapHipfireStrengthFactor,
         float snapStartStrength,
-        float snapVerticalStrengthFactor,
         float snapHeight,
         int snapInnerInterpolationTypeIndex,
         int aimBindingIndex,
@@ -129,9 +129,9 @@ internal readonly struct SmartCoreAimAssistContext
         SnapMode = snapMode;
         SnapOuterRange = snapOuterRange;
         SnapOuterStrength = snapOuterStrength;
-        SnapInnerStrength = snapInnerStrength;
+        SnapFarStrengthFactor = snapFarStrengthFactor;
+        SnapHipfireStrengthFactor = snapHipfireStrengthFactor;
         SnapStartStrength = snapStartStrength;
-        SnapVerticalStrengthFactor = snapVerticalStrengthFactor;
         SnapHeight = snapHeight;
         SnapInnerInterpolationTypeIndex = snapInnerInterpolationTypeIndex;
         AimBindingIndex = aimBindingIndex;
@@ -221,9 +221,12 @@ internal sealed class SmartCoreStickMapper
         }
 
         var startStrength = Math.Clamp(context.SnapStartStrength, 0f, 1f);
-        var innerStrength = Math.Clamp(context.SnapInnerStrength, 0f, 1f);
+        // 内圈强度固定为 1.0，按目标大小缩放：3W 达到外圈直径时用 100%，3W 趋近 0 时降到无限远强度。
+        var outerDiameterModel = MathF.Max(1f, MathF.Min(box.InputWidth, box.InputHeight));
+        var sizeRatio = Math.Clamp(box.W * 3f / outerDiameterModel, 0f, 1f);
+        var farStrengthFactor = Math.Clamp(context.SnapFarStrengthFactor, 0f, 1f);
+        var innerStrength = farStrengthFactor + (1f - farStrengthFactor) * sizeRatio;
         var outerStrength = Math.Clamp(context.SnapOuterStrength, 0f, 1f);
-        var verticalFactor = Math.Clamp(context.SnapVerticalStrengthFactor, 0f, 1f);
 
         var isAiming = GamepadBindingCatalog.IsPressed(context.AimBindingIndex, context.Input);
         float strength;
@@ -253,6 +256,8 @@ internal sealed class SmartCoreStickMapper
                 // Hipfire keeps inner-ring strength once outside inner range.
                 strength = innerStrength;
             }
+
+            strength *= Math.Clamp(context.SnapHipfireStrengthFactor, 0f, 1f);
         }
 
         strength *= Math.Clamp(context.FireStrengthRampMultiplier, 0f, 1f);
@@ -266,7 +271,7 @@ internal sealed class SmartCoreStickMapper
         var normalizedX = dx * invDistance;
         var normalizedY = dy * invDistance;
         var outputX = normalizedX * strength;
-        var outputY = normalizedY * strength * verticalFactor;
+        var outputY = normalizedY * strength;
         rightX = ToStickAxis(outputX);
         rightY = ToStickAxis(outputY);
         return rightX != 0 || rightY != 0;

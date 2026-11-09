@@ -164,6 +164,15 @@ public sealed partial class MainWindow : GameWindow
         var canvasPos = ImGui.GetCursorScreenPos();
         var canvasSize = new Vector2(previewWidth, previewHeight);
         ImGui.InvisibleButton("##SnapCurvePreviewCanvas", canvasSize);
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.BeginTooltip();
+            ImGui.PushTextWrapPos(ImGui.GetFontSize() * 28f);
+            ImGui.TextUnformatted(
+                "吸附强度随距离由近到远的变化：实线为近距离目标的强度曲线，虚线为远距离目标的强度曲线（受无限远强度限制），橙点表示核心区边界处的外围强度。");
+            ImGui.PopTextWrapPos();
+            ImGui.EndTooltip();
+        }
 
         var drawList = ImGui.GetWindowDrawList();
         var canvasMin = canvasPos;
@@ -184,8 +193,10 @@ public sealed partial class MainWindow : GameWindow
         drawList.AddLine(new Vector2(plotMin.X, plotMin.Y), new Vector2(plotMin.X, plotMax.Y), axisColor, 1.5f);
 
         var startStrengthForPreview = Math.Clamp(_homeViewState.SnapStartStrength, 0f, 1f);
-        var innerStrengthForPreview = Math.Clamp(_homeViewState.SnapInnerStrength, 0f, 1f);
+        const float maxStrengthForPreview = 1f;
+        var farStrengthForPreview = Math.Clamp(_homeViewState.SnapFarStrengthFactor, 0f, 1f);
         var outerStrengthForPreview = Math.Clamp(_homeViewState.SnapOuterStrength, 0f, 1f);
+        var farLineColor = ImGui.GetColorU32(new Vector4(0.60f, 0.60f, 0.60f, 1.00f));
 
         Vector2 MapToPlot(float x, float y)
         {
@@ -196,31 +207,60 @@ public sealed partial class MainWindow : GameWindow
                 plotMax.Y - ny * (plotMax.Y - plotMin.Y));
         }
 
-        var lineStart = MapToPlot(0f, startStrengthForPreview);
-        var lineEnd = MapToPlot(1f, innerStrengthForPreview);
-        var highlightPoint = MapToPlot(1f, outerStrengthForPreview);
-
         var interpolationTypeIndexForPreview = _homeViewState.SnapInnerInterpolationTypeIndex >= 0 && _homeViewState.SnapInnerInterpolationTypeIndex < AimAssistOptionCatalog.SnapInnerInterpolationTypeOptions.Length
             ? _homeViewState.SnapInnerInterpolationTypeIndex
             : 0;
         const int interpolationSegments = 24;
-        for (var i = 0; i < interpolationSegments; i++)
+
+        void DrawCurve(float endStrength, uint color, float thickness, bool dashed)
         {
-            var t0 = i / (float)interpolationSegments;
-            var t1 = (i + 1) / (float)interpolationSegments;
-            var curveT0 = SnapInterpolation.EvaluateNormalized(t0, interpolationTypeIndexForPreview);
-            var curveT1 = SnapInterpolation.EvaluateNormalized(t1, interpolationTypeIndexForPreview);
-            var x0 = t0;
-            var x1 = t1;
-            var y0 = startStrengthForPreview + (innerStrengthForPreview - startStrengthForPreview) * curveT0;
-            var y1 = startStrengthForPreview + (innerStrengthForPreview - startStrengthForPreview) * curveT1;
-            drawList.AddLine(MapToPlot(x0, y0), MapToPlot(x1, y1), lineColor, 2.0f);
+            for (var i = 0; i < interpolationSegments; i++)
+            {
+                if (dashed && (i & 1) == 1)
+                {
+                    continue;
+                }
+
+                var t0 = i / (float)interpolationSegments;
+                var t1 = (i + 1) / (float)interpolationSegments;
+                var curveT0 = SnapInterpolation.EvaluateNormalized(t0, interpolationTypeIndexForPreview);
+                var curveT1 = SnapInterpolation.EvaluateNormalized(t1, interpolationTypeIndexForPreview);
+                var y0 = startStrengthForPreview + (endStrength - startStrengthForPreview) * curveT0;
+                var y1 = startStrengthForPreview + (endStrength - startStrengthForPreview) * curveT1;
+                drawList.AddLine(MapToPlot(t0, y0), MapToPlot(t1, y1), color, thickness);
+            }
         }
 
+        // 实线：3W ≥ 吸附范围时的满强度曲线；虚线：3W → 0 时被缩到无限远强度的下限曲线。
+        DrawCurve(maxStrengthForPreview, lineColor, 2.0f, false);
+        var showFarCurve = farStrengthForPreview < 0.999f;
+        if (showFarCurve)
+        {
+            DrawCurve(farStrengthForPreview, farLineColor, 1.5f, true);
+        }
+
+        var lineHeight = ImGui.GetTextLineHeight();
+        var maxEnd = MapToPlot(1f, maxStrengthForPreview);
+        var maxEndLabel = maxStrengthForPreview.ToString("0.00");
+        drawList.AddText(
+            new Vector2(plotMax.X - ImGui.CalcTextSize(maxEndLabel).X - 4f, MathF.Max(plotMin.Y, maxEnd.Y - lineHeight - 1f)),
+            lineColor,
+            maxEndLabel);
+        if (showFarCurve)
+        {
+            var farEnd = MapToPlot(1f, farStrengthForPreview);
+            var farEndLabel = farStrengthForPreview.ToString("0.00");
+            drawList.AddText(
+                new Vector2(plotMax.X - ImGui.CalcTextSize(farEndLabel).X - 4f, MathF.Min(plotMax.Y - lineHeight - 1f, farEnd.Y + 1f)),
+                farLineColor,
+                farEndLabel);
+        }
+
+        var highlightPoint = MapToPlot(1f, outerStrengthForPreview);
         drawList.AddCircleFilled(highlightPoint, 4.0f, pointColor);
         drawList.AddText(new Vector2(plotMin.X + 4f, plotMin.Y + 2f), axisColor, "1.0");
         drawList.AddText(new Vector2(plotMin.X + 4f, plotMax.Y - ImGui.GetTextLineHeight() - 2f), axisColor, "0");
-        var xAxisTickLabel = "内圈";
+        var xAxisTickLabel = "核心区";
         var xAxisTickLabelWidth = ImGui.CalcTextSize(xAxisTickLabel).X;
         drawList.AddText(new Vector2(plotMax.X - xAxisTickLabelWidth - 10f, plotMax.Y - ImGui.GetTextLineHeight() - 2f), axisColor, xAxisTickLabel);
     }
@@ -813,9 +853,9 @@ protected override void OnResize(ResizeEventArgs e)
                 AimAssistOptionCatalog.ResolveSnapMode(_homeViewState.SnapModeIndex),
                 _homeViewState.SnapOuterRange,
                 _homeViewState.SnapOuterStrength,
-                _homeViewState.SnapInnerStrength,
+                _homeViewState.SnapFarStrengthFactor,
+                _homeViewState.SnapHipfireStrengthFactor,
                 _homeViewState.SnapStartStrength,
-                _homeViewState.SnapVerticalStrengthFactor,
                 _homeViewState.SnapHeight,
                 _homeViewState.SnapStrengthRampTime,
                 _homeViewState.SnapInnerInterpolationTypeIndex),

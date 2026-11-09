@@ -1,14 +1,14 @@
 internal readonly record struct SnapSettingsState(
     int OuterRange,
     float OuterStrength,
-    float InnerStrength,
+    float FarStrengthFactor,
+    float HipfireStrengthFactor,
     float StartStrength,
-    float VerticalStrengthFactor,
     float Height,
     float StrengthRampTime,
     int InnerInterpolationTypeIndex)
 {
-    public static SnapSettingsState Default => new(1, 0f, 0f, 0f, 0f, 0f, 0f, 0);
+    public static SnapSettingsState Default => new(1, 0f, 0.5f, 1f, 0f, 0f, 0f, 0);
 }
 
 internal static class SnapConfigCatalog
@@ -16,9 +16,9 @@ internal static class SnapConfigCatalog
     public const string SnapModeKey = "snap";
     public const string OuterRangeKey = "snapOuterRange";
     public const string OuterStrengthKey = "snapOuterStrength";
-    public const string InnerStrengthKey = "snapInnerStrength";
+    public const string FarStrengthFactorKey = "snapFarStrengthFactor";
+    public const string HipfireStrengthFactorKey = "snapHipfireStrengthFactor";
     public const string StartStrengthKey = "snapStartStrength";
-    public const string VerticalStrengthFactorKey = "snapVerticalStrengthFactor";
     public const string HeightKey = "snapHeight";
     public const string StrengthRampTimeKey = "snapStrengthRampTime";
     public const string InnerInterpolationTypeKey = "snapInnerInterpolationType";
@@ -34,9 +34,9 @@ internal static class SnapConfigCatalog
         return new SnapSettingsState(
             outerRange,
             Math.Clamp(repository.TryReadFloat(configPath, OuterStrengthKey) ?? 0f, 0f, 1f),
-            Math.Clamp(repository.TryReadFloat(configPath, InnerStrengthKey) ?? 0f, 0f, 1f),
+            Math.Clamp(repository.TryReadFloat(configPath, FarStrengthFactorKey) ?? SnapSettingsState.Default.FarStrengthFactor, 0f, 1f),
+            Math.Clamp(repository.TryReadFloat(configPath, HipfireStrengthFactorKey) ?? SnapSettingsState.Default.HipfireStrengthFactor, 0f, 1f),
             Math.Clamp(repository.TryReadFloat(configPath, StartStrengthKey) ?? 0f, 0f, 1f),
-            Math.Clamp(repository.TryReadFloat(configPath, VerticalStrengthFactorKey) ?? 0f, 0f, 1f),
             Math.Clamp(repository.TryReadFloat(configPath, HeightKey) ?? 0f, 0f, 1f),
             Math.Clamp(repository.TryReadFloat(configPath, StrengthRampTimeKey) ?? 0f, 0f, 1f),
             AimAssistOptionCatalog.ResolveInterpolationType(repository.TryReadString(configPath, InnerInterpolationTypeKey)));
@@ -48,9 +48,9 @@ internal static class SnapConfigCatalog
         return new SnapSettingsState(
             outerRange,
             Math.Clamp(s.OuterStrength, 0f, 1f),
-            Math.Clamp(s.InnerStrength, 0f, 1f),
+            Math.Clamp(s.FarStrengthFactor, 0f, 1f),
+            Math.Clamp(s.HipfireStrengthFactor, 0f, 1f),
             Math.Clamp(s.StartStrength, 0f, 1f),
-            Math.Clamp(s.VerticalStrengthFactor, 0f, 1f),
             Math.Clamp(s.Height, 0f, 1f),
             Math.Clamp(s.StrengthRampTime, 0f, 1f),
             Math.Clamp(s.InnerInterpolationTypeIndex, 0, AimAssistOptionCatalog.SnapInnerInterpolationTypeOptions.Length - 1));
@@ -60,9 +60,9 @@ internal static class SnapConfigCatalog
     {
         repository.TryWriteInt(configPath, OuterRangeKey, s.OuterRange);
         repository.TryWriteFloat(configPath, OuterStrengthKey, s.OuterStrength);
-        repository.TryWriteFloat(configPath, InnerStrengthKey, s.InnerStrength);
+        repository.TryWriteFloat(configPath, FarStrengthFactorKey, s.FarStrengthFactor);
+        repository.TryWriteFloat(configPath, HipfireStrengthFactorKey, s.HipfireStrengthFactor);
         repository.TryWriteFloat(configPath, StartStrengthKey, s.StartStrength);
-        repository.TryWriteFloat(configPath, VerticalStrengthFactorKey, s.VerticalStrengthFactor);
         repository.TryWriteFloat(configPath, HeightKey, s.Height);
         repository.TryWriteFloat(configPath, StrengthRampTimeKey, s.StrengthRampTime);
         if (s.InnerInterpolationTypeIndex >= 0
