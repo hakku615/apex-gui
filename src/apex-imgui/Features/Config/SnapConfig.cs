@@ -33,27 +33,29 @@ internal static class SnapConfigCatalog
             repository.TryReadInt(configPath, OuterRangeKey) ?? SnapSettingsState.Default.OuterRange,
             selectedModelSize,
             snapOuterRangeMax);
-        return new SnapSettingsState(
+        var state = new SnapSettingsState(
             outerRange,
-            Math.Clamp(repository.TryReadFloat(configPath, OuterStrengthKey) ?? 0f, 0f, 1f),
-            Math.Clamp(repository.TryReadFloat(configPath, FarStrengthFactorKey) ?? SnapSettingsState.Default.FarStrengthFactor, 0f, 1f),
-            Math.Clamp(repository.TryReadFloat(configPath, HipfireStrengthFactorKey) ?? SnapSettingsState.Default.HipfireStrengthFactor, 0f, 1f),
-            Math.Clamp(repository.TryReadFloat(configPath, StartStrengthKey) ?? 0f, 0f, 1f),
-            Math.Clamp(repository.TryReadFloat(configPath, HeightKey) ?? 0f, 0f, 1f),
-            Math.Clamp(repository.TryReadFloat(configPath, StrengthRampTimeKey) ?? 0f, 0f, 1f),
+            repository.TryReadFloat(configPath, OuterStrengthKey) ?? 0f,
+            repository.TryReadFloat(configPath, FarStrengthFactorKey) ?? SnapSettingsState.Default.FarStrengthFactor,
+            repository.TryReadFloat(configPath, HipfireStrengthFactorKey) ?? SnapSettingsState.Default.HipfireStrengthFactor,
+            repository.TryReadFloat(configPath, StartStrengthKey) ?? 0f,
+            repository.TryReadFloat(configPath, HeightKey) ?? 0f,
+            repository.TryReadFloat(configPath, StrengthRampTimeKey) ?? 0f,
             AimAssistOptionCatalog.ResolveInterpolationType(repository.TryReadString(configPath, InnerInterpolationTypeKey)),
             AimAssistOptionCatalog.ResolveInterpolationType(repository.TryReadString(configPath, DistanceInterpolationTypeKey)));
+        return Normalized(state, selectedModelSize, snapOuterRangeMax);
     }
 
     public static SnapSettingsState Normalized(SnapSettingsState s, int selectedModelSize, int snapOuterRangeMax)
     {
         var outerRange = Math.Clamp(s.OuterRange, selectedModelSize, snapOuterRangeMax);
+        var startStrength = Math.Clamp(s.StartStrength, 0f, 1f);
         return new SnapSettingsState(
             outerRange,
-            Math.Clamp(s.OuterStrength, 0f, 1f),
-            Math.Clamp(s.FarStrengthFactor, 0f, 1f),
+            MathF.Max(Math.Clamp(s.OuterStrength, 0f, 1f), startStrength),
+            MathF.Max(Math.Clamp(s.FarStrengthFactor, 0f, 1f), startStrength),
             Math.Clamp(s.HipfireStrengthFactor, 0f, 1f),
-            Math.Clamp(s.StartStrength, 0f, 1f),
+            startStrength,
             Math.Clamp(s.Height, 0f, 1f),
             Math.Clamp(s.StrengthRampTime, 0f, 1f),
             Math.Clamp(s.InnerInterpolationTypeIndex, 0, AimAssistOptionCatalog.SnapInterpolationTypeOptions.Length - 1),

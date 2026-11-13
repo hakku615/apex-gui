@@ -158,7 +158,7 @@ public sealed partial class MainWindow
         ImGui.TextUnformatted("外围强度");
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip("瞄准时，目标位于核心区外、吸附范围内的吸附强度。\n核心区直径为目标框宽度的 3 倍。");
+            ImGui.SetTooltip("瞄准时，目标位于核心区外、吸附范围内的吸附强度。\n核心区直径为目标框宽度的 3 倍，且不低于起始强度。");
         }
 
         ImGui.TableSetColumnIndex(3);
@@ -168,7 +168,7 @@ public sealed partial class MainWindow
             SnapConfigCatalog.OuterStrengthKey,
             _homeViewState.SnapOuterStrength,
             value => _homeViewState.SnapOuterStrength = value,
-            0f,
+            _homeViewState.SnapStartStrength,
             1f);
 
         ImGui.TableSetColumnIndex(4);
@@ -176,7 +176,7 @@ public sealed partial class MainWindow
         ImGui.TextUnformatted("无限远强度");
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip("目标越小（3W 越接近 0）吸附强度越低，最低降到该强度。\n3W 达到外圈直径时按 100% 计算。");
+            ImGui.SetTooltip("目标越小（3W 越接近 0）吸附强度越低，最低降到该强度。\n3W 达到外圈直径时按 100% 计算，且不低于起始强度。");
         }
 
         ImGui.TableSetColumnIndex(5);
@@ -186,7 +186,7 @@ public sealed partial class MainWindow
             SnapConfigCatalog.FarStrengthFactorKey,
             _homeViewState.SnapFarStrengthFactor,
             value => _homeViewState.SnapFarStrengthFactor = value,
-            0f,
+            _homeViewState.SnapStartStrength,
             1f);
     }
 
@@ -216,13 +216,18 @@ public sealed partial class MainWindow
         ImGui.TableSetColumnIndex(2);
         ImGui.AlignTextToFramePadding();
         ImGui.TextUnformatted("起始强度");
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("核心区中心处的吸附强度。\n提高该值时会同步提高低于它的外围强度与无限远强度。");
+        }
+
         ImGui.TableSetColumnIndex(3);
         ImGui.SetNextItemWidth(layout.StrengthInputWidth);
         DrawClampedConfigFloatInput(
             "##SnapStartStrength",
             SnapConfigCatalog.StartStrengthKey,
             _homeViewState.SnapStartStrength,
-            value => _homeViewState.SnapStartStrength = value,
+            ApplySnapStartStrength,
             0f,
             1f);
 
@@ -264,6 +269,22 @@ public sealed partial class MainWindow
             1f,
             0.1f,
             "%.1f");
+    }
+
+    private void ApplySnapStartStrength(float value)
+    {
+        _homeViewState.SnapStartStrength = value;
+        if (_homeViewState.SnapOuterStrength < value)
+        {
+            _homeViewState.SnapOuterStrength = value;
+            TryWriteFloatToCurrentConfig(SnapConfigCatalog.OuterStrengthKey, value);
+        }
+
+        if (_homeViewState.SnapFarStrengthFactor < value)
+        {
+            _homeViewState.SnapFarStrengthFactor = value;
+            TryWriteFloatToCurrentConfig(SnapConfigCatalog.FarStrengthFactorKey, value);
+        }
     }
 
     private void DrawSnapInterpolationTypeRow(

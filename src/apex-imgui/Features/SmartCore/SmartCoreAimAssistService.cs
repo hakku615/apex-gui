@@ -229,11 +229,11 @@ internal sealed class SmartCoreStickMapper
         // 内圈强度固定为 1.0，按目标大小缩放：3W 达到外圈直径时用 100%，3W 趋近 0 时降到无限远强度。
         var outerDiameterModel = MathF.Max(1f, MathF.Min(box.InputWidth, box.InputHeight));
         var sizeRatio = Math.Clamp(box.W * 3f / outerDiameterModel, 0f, 1f);
-        var farStrengthFactor = Math.Clamp(context.SnapFarStrengthFactor, 0f, 1f);
+        var farStrengthFactor = MathF.Max(Math.Clamp(context.SnapFarStrengthFactor, 0f, 1f), startStrength);
         var distanceT = 1f - sizeRatio;
         var distanceCurveT = SnapInterpolation.EvaluateNormalized(distanceT, context.SnapDistanceInterpolationTypeIndex);
         var innerStrength = 1f - (1f - farStrengthFactor) * distanceCurveT;
-        var outerStrength = Math.Clamp(context.SnapOuterStrength, 0f, 1f);
+        var outerStrength = MathF.Max(Math.Clamp(context.SnapOuterStrength, 0f, 1f), startStrength);
 
         var isAiming = GamepadBindingCatalog.IsPressed(context.AimBindingIndex, context.Input);
         float strength;
