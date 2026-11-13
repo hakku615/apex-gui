@@ -9,7 +9,9 @@ internal readonly record struct ViGEmMappingSnapshot(
     bool RequestedEnabled,
     bool IsMappingActive,
     uint? SelectedInstanceId,
-    string? LastError);
+    string? LastError,
+    bool IsSnapActive,
+    float SnapRampMultiplier);
 
 internal readonly record struct ControllerOutputState(
     short LeftX,
@@ -70,6 +72,8 @@ internal sealed partial class ViGEmMappingWorker : IAimAssistDetectionSink, IWea
     private bool _isConnected;
     private bool _requestedEnabled;
     private bool _isMappingActive;
+    private bool _isSnapActive;
+    private float _snapRampMultiplier = 1f;
     private bool _hasSelectedGamepad;
     private uint _selectedGamepadInstanceId;
     private string _status = "未初始化";
@@ -194,7 +198,9 @@ internal sealed partial class ViGEmMappingWorker : IAimAssistDetectionSink, IWea
                 _requestedEnabled,
                 _isMappingActive,
                 _hasSelectedGamepad ? _selectedGamepadInstanceId : null,
-                _lastError);
+                _lastError,
+                _isSnapActive,
+                _snapRampMultiplier);
         }
     }
 
@@ -206,6 +212,8 @@ internal sealed partial class ViGEmMappingWorker : IAimAssistDetectionSink, IWea
             if (!requestedEnabled)
             {
                 _isMappingActive = false;
+                _isSnapActive = false;
+                _snapRampMultiplier = 1f;
             }
         }
     }
@@ -220,6 +228,8 @@ internal sealed partial class ViGEmMappingWorker : IAimAssistDetectionSink, IWea
             if (!_hasSelectedGamepad)
             {
                 _isMappingActive = false;
+                _isSnapActive = false;
+                _snapRampMultiplier = 1f;
             }
 
             sdlGamepadWorker = _sdlGamepadWorker;
@@ -303,6 +313,8 @@ internal sealed partial class ViGEmMappingWorker : IAimAssistDetectionSink, IWea
                 lock (_sync)
                 {
                     _isMappingActive = false;
+                    _isSnapActive = false;
+                    _snapRampMultiplier = 1f;
                 }
                 continue;
             }
@@ -314,6 +326,11 @@ internal sealed partial class ViGEmMappingWorker : IAimAssistDetectionSink, IWea
                 var inGraceWindow = (now - sdlInputFailureSinceUtc.Value) < SdlInputFailureGrace;
                 if (inGraceWindow)
                 {
+                    lock (_sync)
+                    {
+                        _isSnapActive = false;
+                        _snapRampMultiplier = 1f;
+                    }
                     continue;
                 }
 
@@ -323,6 +340,8 @@ internal sealed partial class ViGEmMappingWorker : IAimAssistDetectionSink, IWea
                 lock (_sync)
                 {
                     _isMappingActive = false;
+                    _isSnapActive = false;
+                    _snapRampMultiplier = 1f;
                     if (!string.IsNullOrWhiteSpace(sdlError))
                     {
                         _lastError = sdlError;
@@ -600,19 +619,24 @@ internal sealed partial class ViGEmMappingWorker : IAimAssistDetectionSink, IWea
                 aimAssist.IsEnabled,
                 aimAssist.SnapMode,
                 aimAssist.SnapOuterRange,
-                aimAssist.SnapOuterStrength,
-                aimAssist.SnapFarStrengthFactor,
+                aimAssist.SnapOuterStrengthFactor,
+                aimAssist.SnapSizeGainThreshold,
                 aimAssist.SnapHipfireStrengthFactor,
                 aimAssist.SnapStartStrength,
                 aimAssist.SnapHeight,
                 aimAssist.SnapInnerInterpolationTypeIndex,
-                aimAssist.SnapDistanceInterpolationTypeIndex,
                 bindings.AimBindingIndex,
                 bindings.FireBindingIndex,
                 isAimSnapOverrideWeapon,
                 fireStrengthRampMultiplier,
                 input,
                 GetFreshDetectionBoxes(in aimAssistDetectionState)));
+
+            lock (_sync)
+            {
+                _isSnapActive = aimAssistResult.IsActive;
+                _snapRampMultiplier = fireStrengthRampMultiplier;
+            }
 
             var outputState = new ControllerOutputState(
                 input.LeftX,

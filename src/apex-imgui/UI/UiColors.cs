@@ -21,6 +21,7 @@ internal static class UiColors
     // 武器预览窗口（WinForms GDI+）
     public static readonly Color WeaponPreviewBackground = ColorFromRgb(0x000000); // Office 主题「深色 1」
     public static readonly Color WeaponPreviewTargetBox = ColorFromRgb(0xFF0000);  // Office 标准色「红色」
+    public static readonly Color WeaponPreviewSnapStrength = ColorFromRgb(0x00FF00); // RGB(0, 255, 0)
     public static readonly Color PreviewStatusText = ColorFromRgb(0xC0C0C0);       // WdColor.wdColorGray25
 
     private static Vector4 Rgb(int rgb) => new(

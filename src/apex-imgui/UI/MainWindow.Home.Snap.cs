@@ -40,7 +40,7 @@ public sealed partial class MainWindow
             DrawSnapRangeRow(layout, selectedModelSize, snapOuterRangeMax);
             DrawSnapStrengthRow(layout);
             rightmostItemX = ImGui.GetItemRectMax().X;
-            DrawSnapExtraRow(layout);
+            DrawSnapSizeGainRow(layout);
 
             ImGui.EndTable();
         }
@@ -48,21 +48,11 @@ public sealed partial class MainWindow
         DrawSnapInterpolationTypeRow(
             "##SnapCenterInterpolationRow",
             "##SnapInnerInterpolationTypeCombo",
-            "中心衰减差值",
-            "目标在核心区内由中心向外移动时的吸附强度过渡曲线。\nEase-In：前段变化慢、后段变化快；Ease-Out 相反。",
+            "核心区插值",
+            "核心区内吸附强度随准心到目标距离变化的过渡曲线。\nEase-In：前段变化慢、后段变化快；Ease-Out 相反。",
             SnapConfigCatalog.InnerInterpolationTypeKey,
             () => _homeViewState.SnapInnerInterpolationTypeIndex,
             value => _homeViewState.SnapInnerInterpolationTypeIndex = value,
-            metrics.ReserveWidth,
-            layout.LabelWidth);
-        DrawSnapInterpolationTypeRow(
-            "##SnapDistanceInterpolationRow",
-            "##SnapDistanceInterpolationTypeCombo",
-            "距离衰减差值",
-            "目标框越小（距离越远）时吸附强度衰减的曲线。\nEase-In：先缓降、接近最小时快速衰减；Ease-Out 相反。",
-            SnapConfigCatalog.DistanceInterpolationTypeKey,
-            () => _homeViewState.SnapDistanceInterpolationTypeIndex,
-            value => _homeViewState.SnapDistanceInterpolationTypeIndex = value,
             metrics.ReserveWidth,
             layout.LabelWidth);
 
@@ -91,16 +81,15 @@ public sealed partial class MainWindow
         var strengthInputWidth = rangeInputWidth + ImGui.GetFrameHeight() * 2f + topPanelStyle.ItemInnerSpacing.X * 2f;
         var labelWidth = MeasureMaxTextWidth(
                              "吸附范围",
-                             "腰射强度系数",
-                             "强度爬升时间",
-                             "中心衰减差值",
-                             "距离衰减差值")
+                             "外围强度系数",
+                             "目标大小强度衰减起始",
+                             "核心区插值")
                          + topPanelStyle.CellPadding.X * 2f;
         var middleLabelWidth = MeasureMaxTextWidth(
-                                   "外围强度",
-                                   "起始强度")
+                                   "起始强度",
+                                   "强度爬升时间")
                                + topPanelStyle.CellPadding.X * 2f;
-        var lastLabelWidth = MeasureMaxTextWidth("无限远强度", "吸附高度") + topPanelStyle.CellPadding.X * 2f;
+        var lastLabelWidth = MeasureMaxTextWidth("腰射强度系数", "吸附高度") + topPanelStyle.CellPadding.X * 2f;
         return new SnapSettingsLayout(
             labelWidth,
             middleLabelWidth,
@@ -139,7 +128,7 @@ public sealed partial class MainWindow
         ImGui.TextUnformatted("吸附范围");
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip("吸附范围的直径，目标进入该范围即开始吸附。\n单位：像素，上限取决于模型尺寸与显示高度。");
+            ImGui.SetTooltip("吸附范围的直径，目标进入该范围即开始吸附。\n单位：像素，上限取决于模型尺寸与显示高度。\n目标大小强度缩放还受“目标大小强度衰减起始”控制。");
         }
 
         ImGui.TableSetColumnIndex(1);
@@ -153,41 +142,6 @@ public sealed partial class MainWindow
             SyncSmartCoreVisionPipeline();
         }
 
-        ImGui.TableSetColumnIndex(2);
-        ImGui.AlignTextToFramePadding();
-        ImGui.TextUnformatted("外围强度");
-        if (ImGui.IsItemHovered())
-        {
-            ImGui.SetTooltip("瞄准时，目标位于核心区外、吸附范围内的吸附强度。\n核心区直径为目标框宽度的 3 倍，且不低于起始强度。");
-        }
-
-        ImGui.TableSetColumnIndex(3);
-        ImGui.SetNextItemWidth(layout.StrengthInputWidth);
-        DrawClampedConfigFloatInput(
-            "##SnapOuterStrength",
-            SnapConfigCatalog.OuterStrengthKey,
-            _homeViewState.SnapOuterStrength,
-            value => _homeViewState.SnapOuterStrength = value,
-            _homeViewState.SnapStartStrength,
-            1f);
-
-        ImGui.TableSetColumnIndex(4);
-        ImGui.AlignTextToFramePadding();
-        ImGui.TextUnformatted("无限远强度");
-        if (ImGui.IsItemHovered())
-        {
-            ImGui.SetTooltip("目标越小（3W 越接近 0）吸附强度越低，最低降到该强度。\n3W 达到外圈直径时按 100% 计算，且不低于起始强度。");
-        }
-
-        ImGui.TableSetColumnIndex(5);
-        ImGui.SetNextItemWidth(layout.StrengthInputWidth);
-        DrawClampedConfigFloatInput(
-            "##SnapFarStrengthFactor",
-            SnapConfigCatalog.FarStrengthFactorKey,
-            _homeViewState.SnapFarStrengthFactor,
-            value => _homeViewState.SnapFarStrengthFactor = value,
-            _homeViewState.SnapStartStrength,
-            1f);
     }
 
     private void DrawSnapStrengthRow(in SnapSettingsLayout layout)
@@ -197,19 +151,19 @@ public sealed partial class MainWindow
 
         ImGui.TableSetColumnIndex(0);
         ImGui.AlignTextToFramePadding();
-        ImGui.TextUnformatted("腰射强度系数");
+        ImGui.TextUnformatted("外围强度系数");
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip("未按瞄准键（腰射）时对吸附强度的缩放系数。\n1 表示与内圈强度一致，0 表示腰射不吸附。");
+            ImGui.SetTooltip("瞄准时，目标位于核心区外时的强度系数。\n外围实际强度 = 实时内圈最大强度 乘以 该系数；0 表示外围不吸附，1 表示与内圈最大强度相同。");
         }
 
         ImGui.TableSetColumnIndex(1);
         ImGui.SetNextItemWidth(layout.StrengthInputWidth);
         DrawClampedConfigFloatInput(
-            "##SnapHipfireStrengthFactor",
-            SnapConfigCatalog.HipfireStrengthFactorKey,
-            _homeViewState.SnapHipfireStrengthFactor,
-            value => _homeViewState.SnapHipfireStrengthFactor = value,
+            "##SnapOuterStrengthFactor",
+            SnapConfigCatalog.OuterStrengthFactorKey,
+            _homeViewState.SnapOuterStrengthFactor,
+            value => _homeViewState.SnapOuterStrengthFactor = value,
             0f,
             1f);
 
@@ -218,7 +172,7 @@ public sealed partial class MainWindow
         ImGui.TextUnformatted("起始强度");
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip("核心区中心处的吸附强度。\n提高该值时会同步提高低于它的外围强度与无限远强度。");
+            ImGui.SetTooltip("核心区中心处的相对强度。\n最终吸附强度还会乘以目标大小强度缩放。");
         }
 
         ImGui.TableSetColumnIndex(3);
@@ -230,6 +184,67 @@ public sealed partial class MainWindow
             ApplySnapStartStrength,
             0f,
             1f);
+
+        ImGui.TableSetColumnIndex(4);
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextUnformatted("腰射强度系数");
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("未按瞄准键（腰射）时对吸附强度的缩放系数。\n1 表示与内圈强度一致，0 表示腰射不吸附。");
+        }
+
+        ImGui.TableSetColumnIndex(5);
+        ImGui.SetNextItemWidth(layout.StrengthInputWidth);
+        DrawClampedConfigFloatInput(
+            "##SnapHipfireStrengthFactor",
+            SnapConfigCatalog.HipfireStrengthFactorKey,
+            _homeViewState.SnapHipfireStrengthFactor,
+            value => _homeViewState.SnapHipfireStrengthFactor = value,
+            0f,
+            1f);
+    }
+
+    private void DrawSnapSizeGainRow(in SnapSettingsLayout layout)
+    {
+        ImGui.TableNextRow();
+        ImGui.TableNextRow();
+        ImGui.TableSetColumnIndex(0);
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextUnformatted("目标大小强度衰减起始");
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("当目标小到 3 倍目标框宽低于吸附范围的该比例后，目标大小强度缩放开始线性衰减。\n0 表示始终满增益；1 表示 3W 小于整个吸附范围后才开始衰减。");
+        }
+
+        ImGui.TableSetColumnIndex(1);
+        ImGui.SetNextItemWidth(layout.StrengthInputWidth);
+        DrawClampedConfigFloatInput(
+            "##SnapSizeGainThreshold",
+            SnapConfigCatalog.SizeGainThresholdKey,
+            _homeViewState.SnapSizeGainThreshold,
+            value => _homeViewState.SnapSizeGainThreshold = value,
+            0f,
+            1f);
+
+        ImGui.TableSetColumnIndex(2);
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextUnformatted("强度爬升时间");
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("吸附强度从起始强度爬升到目标强度所需的时间（秒）。\n0 表示瞬间到达目标强度，数值越大爬升越平缓。");
+        }
+
+        ImGui.TableSetColumnIndex(3);
+        ImGui.SetNextItemWidth(layout.StrengthInputWidth);
+        DrawClampedConfigFloatInput(
+            "##SnapStrengthRampTime",
+            SnapConfigCatalog.StrengthRampTimeKey,
+            _homeViewState.SnapStrengthRampTime,
+            value => _homeViewState.SnapStrengthRampTime = value,
+            0f,
+            1f,
+            0.1f,
+            "%.1f");
 
         ImGui.TableSetColumnIndex(4);
         ImGui.AlignTextToFramePadding();
@@ -245,46 +260,9 @@ public sealed partial class MainWindow
             1f);
     }
 
-    private void DrawSnapExtraRow(in SnapSettingsLayout layout)
-    {
-        ImGui.TableNextRow();
-        ImGui.TableNextRow();
-
-        ImGui.TableSetColumnIndex(0);
-        ImGui.AlignTextToFramePadding();
-        ImGui.TextUnformatted("强度爬升时间");
-        if (ImGui.IsItemHovered())
-        {
-            ImGui.SetTooltip("吸附强度从起始强度爬升到目标强度所需的时间（秒）。\n0 表示瞬间到达目标强度，数值越大爬升越平缓。");
-        }
-
-        ImGui.TableSetColumnIndex(1);
-        ImGui.SetNextItemWidth(layout.StrengthInputWidth);
-        DrawClampedConfigFloatInput(
-            "##SnapStrengthRampTime",
-            SnapConfigCatalog.StrengthRampTimeKey,
-            _homeViewState.SnapStrengthRampTime,
-            value => _homeViewState.SnapStrengthRampTime = value,
-            0f,
-            1f,
-            0.1f,
-            "%.1f");
-    }
-
     private void ApplySnapStartStrength(float value)
     {
         _homeViewState.SnapStartStrength = value;
-        if (_homeViewState.SnapOuterStrength < value)
-        {
-            _homeViewState.SnapOuterStrength = value;
-            TryWriteFloatToCurrentConfig(SnapConfigCatalog.OuterStrengthKey, value);
-        }
-
-        if (_homeViewState.SnapFarStrengthFactor < value)
-        {
-            _homeViewState.SnapFarStrengthFactor = value;
-            TryWriteFloatToCurrentConfig(SnapConfigCatalog.FarStrengthFactorKey, value);
-        }
     }
 
     private void DrawSnapInterpolationTypeRow(

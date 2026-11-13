@@ -13,6 +13,9 @@ public sealed partial class MainWindow
     // The preview follows the capture -> detection rate instead of a fixed 60Hz: it polls for new
     // frames every millisecond and only repaints when the pipeline actually produced something.
     private const int SmartCorePreviewActiveIntervalMs = 1;
+    private const int SmartCorePreviewStrengthBarWidthPx = 8;
+    private const int SmartCorePreviewStrengthBarRightPaddingPx = 1;
+    private const float SmartCorePreviewStrengthBarBorderWidthPx = 2.5f;
     private readonly object _smartCorePreviewWindowLock = new();
     private System.Windows.Forms.Form? _smartCorePreviewWindow;
     private bool _smartCorePreviewShuttingDown;
@@ -43,6 +46,8 @@ public sealed partial class MainWindow
                 const int WeaponPreviewGapPx = 0;
                 const int WeaponPreviewPaddingPx = 0;
                 var initialSize = Math.Max(1, _homeViewState.SnapOuterRange);
+                var strengthBarSectionWidth = SmartCorePreviewStrengthBarWidthPx
+                                              + SmartCorePreviewStrengthBarRightPaddingPx;
                 var initialWeaponImageHeight = Math.Max(1, WeaponTemplateCatalog.TemplateHeight);
                 var initialMetricsHeight = Math.Max(1, (System.Drawing.SystemFonts.MessageBoxFont?.Height ?? 12) * 5);
                 var initialWeaponSectionHeight = initialWeaponImageHeight + WeaponPreviewPaddingPx * 2 + initialMetricsHeight;
@@ -50,7 +55,9 @@ public sealed partial class MainWindow
                 {
                     Text = string.Empty,
                     StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen,
-                    ClientSize = new System.Drawing.Size(initialSize, initialSize + WeaponPreviewGapPx + initialWeaponSectionHeight),
+                    ClientSize = new System.Drawing.Size(
+                        initialSize + strengthBarSectionWidth,
+                        initialSize + WeaponPreviewGapPx + initialWeaponSectionHeight),
                     TopMost = true,
                     FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle,
                     MaximizeBox = false,
@@ -114,7 +121,9 @@ public sealed partial class MainWindow
                     var weaponImageHeight = Math.Max(1, WeaponTemplateCatalog.TemplateHeight);
                     var metricsHeight = Math.Max(1, form.Font.Height * 5);
                     var weaponSectionHeight = weaponImageHeight + WeaponPreviewPaddingPx * 2 + metricsHeight;
-                    var expectedClientSize = new System.Drawing.Size(targetSize, targetSize + WeaponPreviewGapPx + weaponSectionHeight);
+                    var expectedClientSize = new System.Drawing.Size(
+                        targetSize + strengthBarSectionWidth,
+                        targetSize + WeaponPreviewGapPx + weaponSectionHeight);
                     if (form.ClientSize != expectedClientSize)
                     {
                         form.ClientSize = expectedClientSize;
@@ -179,7 +188,7 @@ public sealed partial class MainWindow
                     }
                 };
 
-                form.Paint += (_, e) =>
+                form.Paint += (sender, e) =>
                 {
                     e.Graphics.Clear(UiColors.WeaponPreviewBackground);
                     e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
@@ -231,8 +240,49 @@ public sealed partial class MainWindow
                         e.Graphics.DrawImage(cachedBitmap, drawRect);
 
                         var boxes = _onnxWorker?.GetDebugBoxes() ?? Array.Empty<OnnxDebugBox>();
+                        var selectedBoxIndex = -1;
+                        var potentialStrength = 0f;
+                        var actualStrength = 0f;
                         if (boxes.Length > 0)
                         {
+                            var latestInput = default(SdlGamepadInputSnapshot);
+                            _ = _sdlGamepadWorker?.TryGetLatestInput(out latestInput, out _);
+                            var mappingSnapshot = _viGEmMappingWorker?.GetSnapshot();
+                            var snapActive = mappingSnapshot?.IsSnapActive ?? false;
+                            var snapRampMultiplier = Math.Clamp(
+                                mappingSnapshot?.SnapRampMultiplier ?? 1f,
+                                0f,
+                                1f);
+                            var previewContext = new SmartCoreAimAssistContext(
+                                _mappingRuntimeState.IsEnabled,
+                                AimAssistOptionCatalog.ResolveSnapMode(_homeViewState.SnapModeIndex),
+                                _homeViewState.SnapOuterRange,
+                                _homeViewState.SnapOuterStrengthFactor,
+                                _homeViewState.SnapSizeGainThreshold,
+                                _homeViewState.SnapHipfireStrengthFactor,
+                                _homeViewState.SnapStartStrength,
+                                _homeViewState.SnapHeight,
+                                _homeViewState.SnapInnerInterpolationTypeIndex,
+                                _homeViewState.AimBindingIndex,
+                                _homeViewState.FireBindingIndex,
+                                false,
+                                snapRampMultiplier,
+                                latestInput,
+                                boxes);
+
+                            selectedBoxIndex = SmartCoreTargetSelector.SelectTargetIndex(boxes);
+                            if (selectedBoxIndex >= 0)
+                            {
+                                var selectedBox = boxes[selectedBoxIndex];
+                                var evaluation = SmartCoreStickMapper.EvaluateStrength(previewContext, selectedBox);
+                                potentialStrength = evaluation.Strength;
+                                actualStrength = snapActive &&
+                                                 SmartCoreStickMapper.TryMap(previewContext, selectedBox, out _, out _)
+                                    ? potentialStrength * snapRampMultiplier
+                                    : 0f;
+                                actualStrength = Math.Clamp(actualStrength, 0f, potentialStrength);
+                            }
+
                             using var boxPen = new System.Drawing.Pen(UiColors.WeaponPreviewTargetBox, 2f);
                             for (var i = 0; i < boxes.Length; i++)
                             {
@@ -260,6 +310,26 @@ public sealed partial class MainWindow
                                     e.Graphics.DrawRectangle(boxPen, overlayRect.X, overlayRect.Y, overlayRect.Width, overlayRect.Height);
                                 }
                             }
+                        }
+
+                        if (selectedBoxIndex >= 0)
+                        {
+                            using var strengthPen = new System.Drawing.Pen(
+                                UiColors.WeaponPreviewSnapStrength,
+                                SmartCorePreviewStrengthBarBorderWidthPx);
+                            using var strengthBrush = new System.Drawing.SolidBrush(UiColors.WeaponPreviewSnapStrength);
+                            var strengthBarRect = new System.Drawing.RectangleF(
+                                mainRect.Right,
+                                mainRect.Top + 1f,
+                                SmartCorePreviewStrengthBarWidthPx,
+                                MathF.Max(1f, mainRect.Height - 2f));
+                            DrawSnapStrengthBar(
+                                e.Graphics,
+                                strengthPen,
+                                strengthBrush,
+                                strengthBarRect,
+                                actualStrength,
+                                potentialStrength);
                         }
                     }
 
@@ -373,6 +443,38 @@ public sealed partial class MainWindow
             };
             previewWindowThread.SetApartmentState(ApartmentState.STA);
             previewWindowThread.Start();
+        }
+    }
+
+    private static void DrawSnapStrengthBar(
+        System.Drawing.Graphics graphics,
+        System.Drawing.Pen pen,
+        System.Drawing.Brush brush,
+        System.Drawing.RectangleF barRect,
+        float actualStrength,
+        float potentialStrength)
+    {
+        if (barRect.Width <= 0f || barRect.Height <= 0f)
+        {
+            return;
+        }
+
+        var barBottom = barRect.Bottom;
+        var potentialHeight = barRect.Height * Math.Clamp(potentialStrength, 0f, 1f);
+        var actualHeight = Math.Min(potentialHeight, barRect.Height * Math.Clamp(actualStrength, 0f, 1f));
+
+        if (actualHeight > 0.5f)
+        {
+            graphics.FillRectangle(brush, barRect.X, barBottom - actualHeight, barRect.Width, actualHeight);
+        }
+
+        if (potentialHeight > 0.5f)
+        {
+            graphics.DrawRectangle(pen, barRect.X, barBottom - potentialHeight, barRect.Width, potentialHeight);
+        }
+        else
+        {
+            graphics.DrawLine(pen, barRect.X, barBottom - 0.5f, barRect.Right, barBottom - 0.5f);
         }
     }
 

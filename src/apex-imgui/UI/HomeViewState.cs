@@ -13,14 +13,13 @@ internal sealed class HomeViewState
     public string TouchpadLeftCustomKey { get; set; } = GamepadBindingCatalog.DefaultCustomKeyboardKeyName;
     public string TouchpadRightCustomKey { get; set; } = GamepadBindingCatalog.DefaultCustomKeyboardKeyName;
     public int SnapOuterRange { get; set; } = 1;
-    public float SnapOuterStrength { get; set; }
-    public float SnapFarStrengthFactor { get; set; } = 0.5f;
+    public float SnapOuterStrengthFactor { get; set; } = 0.5f;
+    public float SnapSizeGainThreshold { get; set; } = 1f;
     public float SnapHipfireStrengthFactor { get; set; } = 1f;
     public float SnapStartStrength { get; set; }
     public float SnapHeight { get; set; }
     public float SnapStrengthRampTime { get; set; }
     public int SnapInnerInterpolationTypeIndex { get; set; }
-    public int SnapDistanceInterpolationTypeIndex { get; set; }
     public string AddNameBuffer { get; set; } = string.Empty;
     public string AddError { get; set; } = string.Empty;
     public bool IsAddModalOpen { get; set; }
@@ -33,14 +32,13 @@ internal sealed class HomeViewState
     public void ApplySnapConfig(SnapSettingsState snapConfig)
     {
         SnapOuterRange = snapConfig.OuterRange;
-        SnapOuterStrength = snapConfig.OuterStrength;
-        SnapFarStrengthFactor = snapConfig.FarStrengthFactor;
+        SnapOuterStrengthFactor = snapConfig.OuterStrengthFactor;
+        SnapSizeGainThreshold = snapConfig.SizeGainThreshold;
         SnapHipfireStrengthFactor = snapConfig.HipfireStrengthFactor;
         SnapStartStrength = snapConfig.StartStrength;
         SnapHeight = snapConfig.Height;
         SnapStrengthRampTime = snapConfig.StrengthRampTime;
         SnapInnerInterpolationTypeIndex = snapConfig.InnerInterpolationTypeIndex;
-        SnapDistanceInterpolationTypeIndex = snapConfig.DistanceInterpolationTypeIndex;
     }
 
     public void ApplyBindings(BindingConfigState bindings)
@@ -67,14 +65,13 @@ internal sealed class HomeViewState
 
     public SnapSettingsState ToSnapSettings() => new(
         SnapOuterRange,
-        SnapOuterStrength,
-        SnapFarStrengthFactor,
+        SnapOuterStrengthFactor,
+        SnapSizeGainThreshold,
         SnapHipfireStrengthFactor,
         SnapStartStrength,
         SnapHeight,
         SnapStrengthRampTime,
-        SnapInnerInterpolationTypeIndex,
-        SnapDistanceInterpolationTypeIndex);
+        SnapInnerInterpolationTypeIndex);
 
     public void ResetSnapSettings(
         int snapModeIndex,

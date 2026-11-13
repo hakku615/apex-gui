@@ -843,7 +843,7 @@ public sealed partial class MainWindow
 
         minRapidFireStrategyComboWidth += style.FramePadding.X * 2f + ImGui.GetFrameHeight();
         var rapidFireHzLabel = "连点频率";
-        const string rapidFireHzTooltip = "按住开火键时的连点速度，表示每秒完整触发几次开火。\n范围：1–30，仅在连点策略非「关闭连点」时生效。";
+        const string rapidFireHzTooltip = "按住开火键时的连点速度，表示每秒完整触发几次开火。\n范围：1-30，仅在连点策略非「关闭连点」时生效。";
         var rapidFireHzInputWidth = ImGui.CalcTextSize("000").X + style.FramePadding.X * 2f + ImGui.GetFrameHeight() * 2f + style.ItemInnerSpacing.X * 2f;
         var rapidFireHzLabelWidth = ImGui.CalcTextSize(rapidFireHzLabel).X;
         var rapidFireRowSpacing = style.ItemSpacing.X * 2f;
