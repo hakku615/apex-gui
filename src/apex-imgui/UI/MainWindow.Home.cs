@@ -422,8 +422,8 @@ public sealed partial class MainWindow
         DrawGameSelectionRow(metrics);
         DrawModelSelectionRow(metrics);
 
-        DrawSnapSettingsSection(metrics, topPanelStyle);
-        DrawSnapCurveSection(topPanelStyle);
+        var snapSettingsWidth = DrawSnapSettingsSection(metrics, topPanelStyle);
+        DrawSnapCurveSection(topPanelStyle, snapSettingsWidth);
         DrawKeyBindingSection(metrics.ReserveWidth, topPanelStyle);
         DrawMacroSection(topPanelStyle);
         DrawSnapModeSection(metrics.ReserveWidth, topPanelStyle);

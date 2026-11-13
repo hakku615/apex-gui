@@ -15,12 +15,19 @@ internal static class AimAssistOptionCatalog
 {
     public static readonly string[] SnapModeOptions = { "开火吸附", "瞄准 + 开火吸附" };
     public static readonly string[] RapidFireStrategyOptions = { "关闭连点", "始终连点", "根据当前武器连点" };
-    public static readonly string[] SnapInnerInterpolationTypeOptions =
+    public static readonly string[] SnapInterpolationTypeOptions =
     {
-        "Linear",
-        "Quadratic Ease-In",
+        "Cubic Ease-Out",
         "Quadratic Ease-Out",
-        "Quadratic Ease-In-Out"
+        "Sine Ease-Out",
+        "Linear",
+        "Sine Ease-In",
+        "Quadratic Ease-In",
+        "Cubic Ease-In",
+        "Smoothstep",
+        "Sine Ease-In-Out",
+        "Quadratic Ease-In-Out",
+        "Cubic Ease-In-Out"
     };
 
     public static string Label(SnapMode mode) => SnapModeOptions[(int)mode];
@@ -39,7 +46,7 @@ internal static class AimAssistOptionCatalog
 
     public static int ResolveInterpolationType(string? label)
     {
-        return ResolveIndex(label, SnapInnerInterpolationTypeOptions, 0);
+        return ResolveIndex(label, SnapInterpolationTypeOptions, 0);
     }
 
     public static SnapMode ResolveSnapMode(int index)

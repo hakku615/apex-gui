@@ -35,7 +35,8 @@ internal readonly record struct AimAssistParams(
     float SnapStartStrength,
     float SnapHeight,
     float SnapStrengthRampTime,
-    int SnapInnerInterpolationTypeIndex);
+    int SnapInnerInterpolationTypeIndex,
+    int SnapDistanceInterpolationTypeIndex);
 
 internal readonly record struct GamepadBindings(
     int AimBindingIndex,
@@ -71,7 +72,8 @@ internal readonly record struct SmartCoreAimAssistConfigState(
             SnapStartStrength: 0f,
             SnapHeight: 0f,
             SnapStrengthRampTime: 0f,
-            SnapInnerInterpolationTypeIndex: 0),
+            SnapInnerInterpolationTypeIndex: 0,
+            SnapDistanceInterpolationTypeIndex: 0),
         new GamepadBindings(
             AimBindingIndex: GamepadBindingCatalog.DefaultAimIndex,
             FireBindingIndex: GamepadBindingCatalog.DefaultFireIndex,
@@ -101,6 +103,7 @@ internal readonly struct SmartCoreAimAssistContext
     public readonly float SnapStartStrength;
     public readonly float SnapHeight;
     public readonly int SnapInnerInterpolationTypeIndex;
+    public readonly int SnapDistanceInterpolationTypeIndex;
     public readonly int AimBindingIndex;
     public readonly int FireBindingIndex;
     public readonly bool IsAimSnapOverrideWeapon;
@@ -118,6 +121,7 @@ internal readonly struct SmartCoreAimAssistContext
         float snapStartStrength,
         float snapHeight,
         int snapInnerInterpolationTypeIndex,
+        int snapDistanceInterpolationTypeIndex,
         int aimBindingIndex,
         int fireBindingIndex,
         bool isAimSnapOverrideWeapon,
@@ -134,6 +138,7 @@ internal readonly struct SmartCoreAimAssistContext
         SnapStartStrength = snapStartStrength;
         SnapHeight = snapHeight;
         SnapInnerInterpolationTypeIndex = snapInnerInterpolationTypeIndex;
+        SnapDistanceInterpolationTypeIndex = snapDistanceInterpolationTypeIndex;
         AimBindingIndex = aimBindingIndex;
         FireBindingIndex = fireBindingIndex;
         IsAimSnapOverrideWeapon = isAimSnapOverrideWeapon;
@@ -225,7 +230,9 @@ internal sealed class SmartCoreStickMapper
         var outerDiameterModel = MathF.Max(1f, MathF.Min(box.InputWidth, box.InputHeight));
         var sizeRatio = Math.Clamp(box.W * 3f / outerDiameterModel, 0f, 1f);
         var farStrengthFactor = Math.Clamp(context.SnapFarStrengthFactor, 0f, 1f);
-        var innerStrength = farStrengthFactor + (1f - farStrengthFactor) * sizeRatio;
+        var distanceT = 1f - sizeRatio;
+        var distanceCurveT = SnapInterpolation.EvaluateNormalized(distanceT, context.SnapDistanceInterpolationTypeIndex);
+        var innerStrength = 1f - (1f - farStrengthFactor) * distanceCurveT;
         var outerStrength = Math.Clamp(context.SnapOuterStrength, 0f, 1f);
 
         var isAiming = GamepadBindingCatalog.IsPressed(context.AimBindingIndex, context.Input);

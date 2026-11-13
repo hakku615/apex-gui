@@ -6,9 +6,10 @@ internal readonly record struct SnapSettingsState(
     float StartStrength,
     float Height,
     float StrengthRampTime,
-    int InnerInterpolationTypeIndex)
+    int InnerInterpolationTypeIndex,
+    int DistanceInterpolationTypeIndex)
 {
-    public static SnapSettingsState Default => new(1, 0f, 0.5f, 1f, 0f, 0f, 0f, 0);
+    public static SnapSettingsState Default => new(1, 0f, 0.5f, 1f, 0f, 0f, 0f, 0, 0);
 }
 
 internal static class SnapConfigCatalog
@@ -22,6 +23,7 @@ internal static class SnapConfigCatalog
     public const string HeightKey = "snapHeight";
     public const string StrengthRampTimeKey = "snapStrengthRampTime";
     public const string InnerInterpolationTypeKey = "snapInnerInterpolationType";
+    public const string DistanceInterpolationTypeKey = "snapDistanceInterpolationType";
 
     public static SnapSettingsState Read(
         ConfigRepository repository, string configPath, int selectedModelSize, int displayHeightLimit)
@@ -39,7 +41,8 @@ internal static class SnapConfigCatalog
             Math.Clamp(repository.TryReadFloat(configPath, StartStrengthKey) ?? 0f, 0f, 1f),
             Math.Clamp(repository.TryReadFloat(configPath, HeightKey) ?? 0f, 0f, 1f),
             Math.Clamp(repository.TryReadFloat(configPath, StrengthRampTimeKey) ?? 0f, 0f, 1f),
-            AimAssistOptionCatalog.ResolveInterpolationType(repository.TryReadString(configPath, InnerInterpolationTypeKey)));
+            AimAssistOptionCatalog.ResolveInterpolationType(repository.TryReadString(configPath, InnerInterpolationTypeKey)),
+            AimAssistOptionCatalog.ResolveInterpolationType(repository.TryReadString(configPath, DistanceInterpolationTypeKey)));
     }
 
     public static SnapSettingsState Normalized(SnapSettingsState s, int selectedModelSize, int snapOuterRangeMax)
@@ -53,7 +56,8 @@ internal static class SnapConfigCatalog
             Math.Clamp(s.StartStrength, 0f, 1f),
             Math.Clamp(s.Height, 0f, 1f),
             Math.Clamp(s.StrengthRampTime, 0f, 1f),
-            Math.Clamp(s.InnerInterpolationTypeIndex, 0, AimAssistOptionCatalog.SnapInnerInterpolationTypeOptions.Length - 1));
+            Math.Clamp(s.InnerInterpolationTypeIndex, 0, AimAssistOptionCatalog.SnapInterpolationTypeOptions.Length - 1),
+            Math.Clamp(s.DistanceInterpolationTypeIndex, 0, AimAssistOptionCatalog.SnapInterpolationTypeOptions.Length - 1));
     }
 
     public static void Write(ConfigRepository repository, string configPath, SnapSettingsState s)
@@ -66,12 +70,21 @@ internal static class SnapConfigCatalog
         repository.TryWriteFloat(configPath, HeightKey, s.Height);
         repository.TryWriteFloat(configPath, StrengthRampTimeKey, s.StrengthRampTime);
         if (s.InnerInterpolationTypeIndex >= 0
-            && s.InnerInterpolationTypeIndex < AimAssistOptionCatalog.SnapInnerInterpolationTypeOptions.Length)
+            && s.InnerInterpolationTypeIndex < AimAssistOptionCatalog.SnapInterpolationTypeOptions.Length)
         {
             repository.TryWriteString(
                 configPath,
                 InnerInterpolationTypeKey,
-                AimAssistOptionCatalog.SnapInnerInterpolationTypeOptions[s.InnerInterpolationTypeIndex]);
+                AimAssistOptionCatalog.SnapInterpolationTypeOptions[s.InnerInterpolationTypeIndex]);
+        }
+
+        if (s.DistanceInterpolationTypeIndex >= 0
+            && s.DistanceInterpolationTypeIndex < AimAssistOptionCatalog.SnapInterpolationTypeOptions.Length)
+        {
+            repository.TryWriteString(
+                configPath,
+                DistanceInterpolationTypeKey,
+                AimAssistOptionCatalog.SnapInterpolationTypeOptions[s.DistanceInterpolationTypeIndex]);
         }
     }
 }

@@ -24,6 +24,7 @@ public sealed partial class MainWindow : GameWindow
 
     private ImGuiController? _controller;
     private float _dpiScale = 1.0f;
+    private float _snapSettingsWidth;
 
     private readonly List<OnnxModelConfig> _onnxModels = new();
     private int _onnxTopSelectedModelIndex = -1;
@@ -157,59 +158,40 @@ public sealed partial class MainWindow : GameWindow
         ImGui.End();
     }
 
-    private void DrawSnapCurvePreview()
+    private void DrawSnapCurvePreview(float snapSettingsWidth)
     {
-        var previewHeight = ImGui.GetFrameHeightWithSpacing() * 4f;
-        var previewWidth = MathF.Min(previewHeight * 2f, ImGui.GetContentRegionAvail().X);
-        var canvasPos = ImGui.GetCursorScreenPos();
-        var canvasSize = new Vector2(previewWidth, previewHeight);
-        ImGui.InvisibleButton("##SnapCurvePreviewCanvas", canvasSize);
-        if (ImGui.IsItemHovered())
-        {
-            ImGui.BeginTooltip();
-            ImGui.PushTextWrapPos(ImGui.GetFontSize() * 28f);
-            ImGui.TextUnformatted(
-                "吸附强度随距离由近到远的变化：实线为近距离目标的强度曲线，虚线为远距离目标的强度曲线（受无限远强度限制），橙点表示核心区边界处的外围强度。");
-            ImGui.PopTextWrapPos();
-            ImGui.EndTooltip();
-        }
+        var itemSpacing = ImGui.GetStyle().ItemSpacing.X;
+        var availableWidth = ImGui.GetContentRegionAvail().X;
+        var targetWidth = snapSettingsWidth > 0f ? snapSettingsWidth : availableWidth;
+        var canvasSize = MathF.Max(1f, (targetWidth - itemSpacing) * 0.5f);
+        DrawSnapCenterCurvePreview(canvasSize);
+        ImGui.SameLine(0f, itemSpacing);
+        DrawSnapDistanceCurvePreview(canvasSize);
+    }
 
-        var drawList = ImGui.GetWindowDrawList();
-        var canvasMin = canvasPos;
-        var canvasMax = canvasPos + canvasSize;
-        const float axisPadding = 12f;
-        var plotMin = new Vector2(canvasMin.X + axisPadding, canvasMin.Y + axisPadding);
-        var plotMax = new Vector2(canvasMax.X - axisPadding, canvasMax.Y - axisPadding);
+    private void DrawSnapCenterCurvePreview(float canvasSize)
+    {
+        ImGui.BeginGroup();
+        ImGui.TextUnformatted("中心衰减");
+
+        var drawList = BeginSnapCurveCanvas(
+            "##SnapCenterCurvePreviewCanvas",
+            canvasSize,
+            "吸附强度随核心区内距离的变化：实线为近距离目标的强度曲线，虚线为远距离目标的强度曲线（受无限远强度限制），橙点表示核心区边界处的外围强度。",
+            out var plotMin,
+            out var plotMax);
 
         var axisColor = ImGui.GetColorU32(ImGuiCol.Text);
         var lineColor = ImGui.GetColorU32(new Vector4(0.20f, 0.70f, 1.00f, 1.00f));
         var pointColor = ImGui.GetColorU32(new Vector4(1.00f, 0.45f, 0.20f, 1.00f));
-        var borderColor = ImGui.GetColorU32(ImGuiCol.Border);
-        var bgColor = ImGui.GetColorU32(new Vector4(0.08f, 0.09f, 0.11f, 1.00f));
-
-        drawList.AddRectFilled(canvasMin, canvasMax, bgColor, 4f);
-        drawList.AddRect(canvasMin, canvasMax, borderColor, 4f);
-        drawList.AddLine(new Vector2(plotMin.X, plotMax.Y), new Vector2(plotMax.X, plotMax.Y), axisColor, 1.5f);
-        drawList.AddLine(new Vector2(plotMin.X, plotMin.Y), new Vector2(plotMin.X, plotMax.Y), axisColor, 1.5f);
-
-        var startStrengthForPreview = Math.Clamp(_homeViewState.SnapStartStrength, 0f, 1f);
-        const float maxStrengthForPreview = 1f;
-        var farStrengthForPreview = Math.Clamp(_homeViewState.SnapFarStrengthFactor, 0f, 1f);
-        var outerStrengthForPreview = Math.Clamp(_homeViewState.SnapOuterStrength, 0f, 1f);
         var farLineColor = ImGui.GetColorU32(new Vector4(0.60f, 0.60f, 0.60f, 1.00f));
-
-        Vector2 MapToPlot(float x, float y)
-        {
-            var nx = Math.Clamp(x, 0f, 1f);
-            var ny = Math.Clamp(y, 0f, 1f);
-            return new Vector2(
-                plotMin.X + nx * (plotMax.X - plotMin.X),
-                plotMax.Y - ny * (plotMax.Y - plotMin.Y));
-        }
-
-        var interpolationTypeIndexForPreview = _homeViewState.SnapInnerInterpolationTypeIndex >= 0 && _homeViewState.SnapInnerInterpolationTypeIndex < AimAssistOptionCatalog.SnapInnerInterpolationTypeOptions.Length
-            ? _homeViewState.SnapInnerInterpolationTypeIndex
-            : 0;
+        var startStrength = Math.Clamp(_homeViewState.SnapStartStrength, 0f, 1f);
+        var farStrength = Math.Clamp(_homeViewState.SnapFarStrengthFactor, 0f, 1f);
+        var outerStrength = Math.Clamp(_homeViewState.SnapOuterStrength, 0f, 1f);
+        var interpolationTypeIndex = Math.Clamp(
+            _homeViewState.SnapInnerInterpolationTypeIndex,
+            0,
+            AimAssistOptionCatalog.SnapInterpolationTypeOptions.Length - 1);
         const int interpolationSegments = 24;
 
         void DrawCurve(float endStrength, uint color, float thickness, bool dashed)
@@ -223,46 +205,166 @@ public sealed partial class MainWindow : GameWindow
 
                 var t0 = i / (float)interpolationSegments;
                 var t1 = (i + 1) / (float)interpolationSegments;
-                var curveT0 = SnapInterpolation.EvaluateNormalized(t0, interpolationTypeIndexForPreview);
-                var curveT1 = SnapInterpolation.EvaluateNormalized(t1, interpolationTypeIndexForPreview);
-                var y0 = startStrengthForPreview + (endStrength - startStrengthForPreview) * curveT0;
-                var y1 = startStrengthForPreview + (endStrength - startStrengthForPreview) * curveT1;
-                drawList.AddLine(MapToPlot(t0, y0), MapToPlot(t1, y1), color, thickness);
+                var curveT0 = SnapInterpolation.EvaluateNormalized(t0, interpolationTypeIndex);
+                var curveT1 = SnapInterpolation.EvaluateNormalized(t1, interpolationTypeIndex);
+                var y0 = startStrength + (endStrength - startStrength) * curveT0;
+                var y1 = startStrength + (endStrength - startStrength) * curveT1;
+                drawList.AddLine(
+                    MapCurvePoint(plotMin, plotMax, t0, y0),
+                    MapCurvePoint(plotMin, plotMax, t1, y1),
+                    color,
+                    thickness);
             }
         }
 
         // 实线：3W ≥ 吸附范围时的满强度曲线；虚线：3W → 0 时被缩到无限远强度的下限曲线。
-        DrawCurve(maxStrengthForPreview, lineColor, 2.0f, false);
-        var showFarCurve = farStrengthForPreview < 0.999f;
+        DrawCurve(1f, lineColor, 2.0f, false);
+        var showFarCurve = farStrength < 0.999f;
         if (showFarCurve)
         {
-            DrawCurve(farStrengthForPreview, farLineColor, 1.5f, true);
+            DrawCurve(farStrength, farLineColor, 1.5f, true);
         }
 
         var lineHeight = ImGui.GetTextLineHeight();
-        var maxEnd = MapToPlot(1f, maxStrengthForPreview);
-        var maxEndLabel = maxStrengthForPreview.ToString("0.00");
+        var maxEnd = MapCurvePoint(plotMin, plotMax, 1f, 1f);
+        var maxEndLabel = "1.00";
         drawList.AddText(
             new Vector2(plotMax.X - ImGui.CalcTextSize(maxEndLabel).X - 4f, MathF.Max(plotMin.Y, maxEnd.Y - lineHeight - 1f)),
             lineColor,
             maxEndLabel);
         if (showFarCurve)
         {
-            var farEnd = MapToPlot(1f, farStrengthForPreview);
-            var farEndLabel = farStrengthForPreview.ToString("0.00");
+            var farEnd = MapCurvePoint(plotMin, plotMax, 1f, farStrength);
+            var farEndLabel = farStrength.ToString("0.00");
             drawList.AddText(
                 new Vector2(plotMax.X - ImGui.CalcTextSize(farEndLabel).X - 4f, MathF.Min(plotMax.Y - lineHeight - 1f, farEnd.Y + 1f)),
                 farLineColor,
                 farEndLabel);
         }
 
-        var highlightPoint = MapToPlot(1f, outerStrengthForPreview);
+        var highlightPoint = MapCurvePoint(plotMin, plotMax, 1f, outerStrength);
         drawList.AddCircleFilled(highlightPoint, 4.0f, pointColor);
         drawList.AddText(new Vector2(plotMin.X + 4f, plotMin.Y + 2f), axisColor, "1.0");
-        drawList.AddText(new Vector2(plotMin.X + 4f, plotMax.Y - ImGui.GetTextLineHeight() - 2f), axisColor, "0");
+        drawList.AddText(new Vector2(plotMin.X + 4f, plotMax.Y - lineHeight - 2f), axisColor, "0");
         var xAxisTickLabel = "核心区";
         var xAxisTickLabelWidth = ImGui.CalcTextSize(xAxisTickLabel).X;
-        drawList.AddText(new Vector2(plotMax.X - xAxisTickLabelWidth - 10f, plotMax.Y - ImGui.GetTextLineHeight() - 2f), axisColor, xAxisTickLabel);
+        drawList.AddText(new Vector2(plotMax.X - xAxisTickLabelWidth - 10f, plotMax.Y - lineHeight - 2f), axisColor, xAxisTickLabel);
+
+        ImGui.EndGroup();
+    }
+
+    private void DrawSnapDistanceCurvePreview(float canvasSize)
+    {
+        ImGui.BeginGroup();
+        ImGui.TextUnformatted("距离衰减");
+
+        var drawList = BeginSnapCurveCanvas(
+            "##SnapDistanceCurvePreviewCanvas",
+            canvasSize,
+            "吸附强度随目标大小/远近的变化：横轴越靠右表示目标越小、距离越远；虚线为无限远强度下限。",
+            out var plotMin,
+            out var plotMax);
+
+        var axisColor = ImGui.GetColorU32(ImGuiCol.Text);
+        var lineColor = ImGui.GetColorU32(new Vector4(0.30f, 0.85f, 0.55f, 1.00f));
+        var farLineColor = ImGui.GetColorU32(new Vector4(0.60f, 0.60f, 0.60f, 1.00f));
+        var farStrength = Math.Clamp(_homeViewState.SnapFarStrengthFactor, 0f, 1f);
+        var interpolationTypeIndex = Math.Clamp(
+            _homeViewState.SnapDistanceInterpolationTypeIndex,
+            0,
+            AimAssistOptionCatalog.SnapInterpolationTypeOptions.Length - 1);
+        const int interpolationSegments = 24;
+
+        const int referenceDashes = 20;
+        for (var i = 0; i < referenceDashes; i += 2)
+        {
+            var x0 = i / (float)referenceDashes;
+            var x1 = (i + 1) / (float)referenceDashes;
+            drawList.AddLine(
+                MapCurvePoint(plotMin, plotMax, x0, farStrength),
+                MapCurvePoint(plotMin, plotMax, x1, farStrength),
+                farLineColor,
+                1.0f);
+        }
+
+        for (var i = 0; i < interpolationSegments; i++)
+        {
+            var t0 = i / (float)interpolationSegments;
+            var t1 = (i + 1) / (float)interpolationSegments;
+            var curveT0 = SnapInterpolation.EvaluateNormalized(t0, interpolationTypeIndex);
+            var curveT1 = SnapInterpolation.EvaluateNormalized(t1, interpolationTypeIndex);
+            var y0 = 1f - (1f - farStrength) * curveT0;
+            var y1 = 1f - (1f - farStrength) * curveT1;
+            drawList.AddLine(
+                MapCurvePoint(plotMin, plotMax, t0, y0),
+                MapCurvePoint(plotMin, plotMax, t1, y1),
+                lineColor,
+                2.0f);
+        }
+
+        var lineHeight = ImGui.GetTextLineHeight();
+        var farLabel = farStrength.ToString("0.00");
+        var farLabelMaxY = MathF.Max(plotMin.Y, plotMax.Y - lineHeight * 2f - 4f);
+        var farLabelY = Math.Clamp(
+            MapCurvePoint(plotMin, plotMax, 1f, farStrength).Y - lineHeight - 1f,
+            plotMin.Y,
+            farLabelMaxY);
+        drawList.AddText(
+            new Vector2(plotMax.X - ImGui.CalcTextSize(farLabel).X - 4f, farLabelY),
+            farLineColor,
+            farLabel);
+        drawList.AddText(new Vector2(plotMin.X + 4f, plotMin.Y + 2f), axisColor, "1.0");
+        drawList.AddText(new Vector2(plotMin.X + 4f, plotMax.Y - lineHeight - 2f), axisColor, "0");
+        var xAxisTickLabel = "远";
+        var xAxisTickLabelWidth = ImGui.CalcTextSize(xAxisTickLabel).X;
+        drawList.AddText(new Vector2(plotMax.X - xAxisTickLabelWidth - 10f, plotMax.Y - lineHeight - 2f), axisColor, xAxisTickLabel);
+
+        ImGui.EndGroup();
+    }
+
+    private static ImDrawListPtr BeginSnapCurveCanvas(
+        string canvasId,
+        float canvasSize,
+        string tooltip,
+        out Vector2 plotMin,
+        out Vector2 plotMax)
+    {
+        var canvasPos = ImGui.GetCursorScreenPos();
+        var canvasExtent = new Vector2(canvasSize, canvasSize);
+        ImGui.InvisibleButton(canvasId, canvasExtent);
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.BeginTooltip();
+            ImGui.PushTextWrapPos(ImGui.GetFontSize() * 28f);
+            ImGui.TextUnformatted(tooltip);
+            ImGui.PopTextWrapPos();
+            ImGui.EndTooltip();
+        }
+
+        var drawList = ImGui.GetWindowDrawList();
+        var canvasMin = canvasPos;
+        var canvasMax = canvasPos + canvasExtent;
+        const float axisPadding = 12f;
+        plotMin = new Vector2(canvasMin.X + axisPadding, canvasMin.Y + axisPadding);
+        plotMax = new Vector2(canvasMax.X - axisPadding, canvasMax.Y - axisPadding);
+
+        var axisColor = ImGui.GetColorU32(ImGuiCol.Text);
+        var borderColor = ImGui.GetColorU32(ImGuiCol.Border);
+        var bgColor = ImGui.GetColorU32(new Vector4(0.08f, 0.09f, 0.11f, 1.00f));
+        drawList.AddRectFilled(canvasMin, canvasMax, bgColor, 4f);
+        drawList.AddRect(canvasMin, canvasMax, borderColor, 4f);
+        drawList.AddLine(new Vector2(plotMin.X, plotMax.Y), new Vector2(plotMax.X, plotMax.Y), axisColor, 1.5f);
+        drawList.AddLine(new Vector2(plotMin.X, plotMin.Y), new Vector2(plotMin.X, plotMax.Y), axisColor, 1.5f);
+        return drawList;
+    }
+
+    private static Vector2 MapCurvePoint(Vector2 plotMin, Vector2 plotMax, float x, float y)
+    {
+        var nx = Math.Clamp(x, 0f, 1f);
+        var ny = Math.Clamp(y, 0f, 1f);
+        return new Vector2(
+            plotMin.X + nx * (plotMax.X - plotMin.X),
+            plotMax.Y - ny * (plotMax.Y - plotMin.Y));
     }
 
     private void DrawHomeModelCombo(string id, float width = -1f)
@@ -858,7 +960,8 @@ protected override void OnResize(ResizeEventArgs e)
                 _homeViewState.SnapStartStrength,
                 _homeViewState.SnapHeight,
                 _homeViewState.SnapStrengthRampTime,
-                _homeViewState.SnapInnerInterpolationTypeIndex),
+                _homeViewState.SnapInnerInterpolationTypeIndex,
+                _homeViewState.SnapDistanceInterpolationTypeIndex),
             new GamepadBindings(
                 _homeViewState.AimBindingIndex,
                 _homeViewState.FireBindingIndex,

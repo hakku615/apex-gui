@@ -606,6 +606,7 @@ internal sealed partial class ViGEmMappingWorker : IAimAssistDetectionSink, IWea
                 aimAssist.SnapStartStrength,
                 aimAssist.SnapHeight,
                 aimAssist.SnapInnerInterpolationTypeIndex,
+                aimAssist.SnapDistanceInterpolationTypeIndex,
                 bindings.AimBindingIndex,
                 bindings.FireBindingIndex,
                 isAimSnapOverrideWeapon,

@@ -14,7 +14,7 @@ public sealed partial class MainWindow
         float StrengthInputWidth,
         float ExtraInputWidth);
 
-    private void DrawSnapSettingsSection(HomeLayoutMetrics metrics, ImGuiStylePtr topPanelStyle)
+    private float DrawSnapSettingsSection(HomeLayoutMetrics metrics, ImGuiStylePtr topPanelStyle)
     {
         ImGui.TableNextRow();
         ImGui.TableNextRow();
@@ -31,18 +31,52 @@ public sealed partial class MainWindow
         NormalizeSnapSettings(selectedModelSize, snapOuterRangeMax);
         var layout = BuildSnapSettingsLayout(topPanelStyle);
 
+        var tableStartX = ImGui.GetCursorScreenPos().X;
+        var rightmostItemX = tableStartX;
         ImGui.SetCursorPosY(ImGui.GetCursorPosY() - topPanelStyle.CellPadding.Y);
         if (ImGui.BeginTable("##SnapSettingsGrid", 6, ImGuiTableFlags.SizingFixedFit))
         {
             SetupSnapSettingsGridColumns(layout);
             DrawSnapRangeRow(layout, selectedModelSize, snapOuterRangeMax);
             DrawSnapStrengthRow(layout);
+            rightmostItemX = ImGui.GetItemRectMax().X;
             DrawSnapExtraRow(layout);
 
             ImGui.EndTable();
         }
 
-        DrawSnapInterpolationTypeRow(metrics.ReserveWidth, layout.LabelWidth);
+        DrawSnapInterpolationTypeRow(
+            "##SnapCenterInterpolationRow",
+            "##SnapInnerInterpolationTypeCombo",
+            "中心衰减差值",
+            "目标在核心区内由中心向外移动时的吸附强度过渡曲线。\nEase-In：前段变化慢、后段变化快；Ease-Out 相反。",
+            SnapConfigCatalog.InnerInterpolationTypeKey,
+            () => _homeViewState.SnapInnerInterpolationTypeIndex,
+            value => _homeViewState.SnapInnerInterpolationTypeIndex = value,
+            metrics.ReserveWidth,
+            layout.LabelWidth);
+        DrawSnapInterpolationTypeRow(
+            "##SnapDistanceInterpolationRow",
+            "##SnapDistanceInterpolationTypeCombo",
+            "距离衰减差值",
+            "目标框越小（距离越远）时吸附强度衰减的曲线。\nEase-In：先缓降、接近最小时快速衰减；Ease-Out 相反。",
+            SnapConfigCatalog.DistanceInterpolationTypeKey,
+            () => _homeViewState.SnapDistanceInterpolationTypeIndex,
+            value => _homeViewState.SnapDistanceInterpolationTypeIndex = value,
+            metrics.ReserveWidth,
+            layout.LabelWidth);
+
+        var fallbackWidth = layout.LabelWidth
+                            + layout.MiddleLabelWidth
+                            + layout.LastLabelWidth
+                            + layout.StrengthInputWidth * 3f;
+        var measuredWidth = rightmostItemX - tableStartX;
+        if (_snapSettingsWidth <= 0f && measuredWidth >= fallbackWidth)
+        {
+            _snapSettingsWidth = measuredWidth;
+        }
+
+        return _snapSettingsWidth > 0f ? _snapSettingsWidth : fallbackWidth;
     }
 
     private void NormalizeSnapSettings(int selectedModelSize, int snapOuterRangeMax)
@@ -58,7 +92,9 @@ public sealed partial class MainWindow
         var labelWidth = MeasureMaxTextWidth(
                              "吸附范围",
                              "腰射强度系数",
-                             "强度爬升时间")
+                             "强度爬升时间",
+                             "中心衰减差值",
+                             "距离衰减差值")
                          + topPanelStyle.CellPadding.X * 2f;
         var middleLabelWidth = MeasureMaxTextWidth(
                                    "外围强度",
@@ -230,9 +266,18 @@ public sealed partial class MainWindow
             "%.1f");
     }
 
-    private void DrawSnapInterpolationTypeRow(float reserveWidth, float labelWidth)
+    private void DrawSnapInterpolationTypeRow(
+        string tableId,
+        string comboId,
+        string label,
+        string tooltip,
+        string configKey,
+        Func<int> getInterpolationTypeIndex,
+        Action<int> setInterpolationTypeIndex,
+        float reserveWidth,
+        float labelWidth)
     {
-        if (!ImGui.BeginTable("##SnapInterpolationRow", 2, ImGuiTableFlags.SizingStretchProp))
+        if (!ImGui.BeginTable(tableId, 2, ImGuiTableFlags.SizingStretchProp))
         {
             return;
         }
@@ -240,28 +285,33 @@ public sealed partial class MainWindow
         ImGui.TableSetupColumn("##SnapInterpolationLabel", ImGuiTableColumnFlags.WidthFixed, labelWidth);
         ImGui.TableSetupColumn("##SnapInterpolationInput", ImGuiTableColumnFlags.WidthStretch);
         ImGui.TableNextRow();
-        _homeViewState.SnapInnerInterpolationTypeIndex =
-            _homeViewState.SnapInnerInterpolationTypeIndex >= 0 && _homeViewState.SnapInnerInterpolationTypeIndex < AimAssistOptionCatalog.SnapInnerInterpolationTypeOptions.Length
-                ? _homeViewState.SnapInnerInterpolationTypeIndex
-                : 0;
+
+        var interpolationIndex = Math.Clamp(
+            getInterpolationTypeIndex(),
+            0,
+            AimAssistOptionCatalog.SnapInterpolationTypeOptions.Length - 1);
+        setInterpolationTypeIndex(interpolationIndex);
 
         ImGui.TableSetColumnIndex(0);
         ImGui.AlignTextToFramePadding();
-        ImGui.TextUnformatted("中心强度差值");
+        ImGui.TextUnformatted(label);
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(tooltip);
+        }
 
         ImGui.TableSetColumnIndex(1);
         var interpolationComboWidth = MathF.Max(90f, ImGui.GetContentRegionAvail().X - reserveWidth);
-        var interpolationIndex = _homeViewState.SnapInnerInterpolationTypeIndex;
         var interpolationChanged = DrawConfigBoundCombo(
-            "##SnapInnerInterpolationTypeCombo",
-            AimAssistOptionCatalog.SnapInnerInterpolationTypeOptions,
+            comboId,
+            AimAssistOptionCatalog.SnapInterpolationTypeOptions,
             ref interpolationIndex,
             interpolationComboWidth,
             false);
-        _homeViewState.SnapInnerInterpolationTypeIndex = interpolationIndex;
+        setInterpolationTypeIndex(interpolationIndex);
         if (interpolationChanged)
         {
-            TryWriteStringToCurrentConfig(SnapConfigCatalog.InnerInterpolationTypeKey, AimAssistOptionCatalog.SnapInnerInterpolationTypeOptions[interpolationIndex]);
+            TryWriteStringToCurrentConfig(configKey, AimAssistOptionCatalog.SnapInterpolationTypeOptions[interpolationIndex]);
             PushAimAssistConfig();
         }
 
@@ -290,7 +340,7 @@ public sealed partial class MainWindow
         PushAimAssistConfig();
     }
 
-    private void DrawSnapCurveSection(ImGuiStylePtr topPanelStyle)
+    private void DrawSnapCurveSection(ImGuiStylePtr topPanelStyle, float snapSettingsWidth)
     {
         ImGui.TableNextRow();
         ImGui.TableNextRow();
@@ -300,6 +350,6 @@ public sealed partial class MainWindow
         ImGui.TextUnformatted("吸附曲线预览");
         ImGui.TableSetColumnIndex(1);
         // ImGui.SetCursorPosY(ImGui.GetCursorPosY() - topPanelStyle.CellPadding.Y);
-        DrawSnapCurvePreview();
+        DrawSnapCurvePreview(snapSettingsWidth);
     }
 }

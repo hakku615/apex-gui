@@ -20,6 +20,7 @@ internal sealed class HomeViewState
     public float SnapHeight { get; set; }
     public float SnapStrengthRampTime { get; set; }
     public int SnapInnerInterpolationTypeIndex { get; set; }
+    public int SnapDistanceInterpolationTypeIndex { get; set; }
     public string AddNameBuffer { get; set; } = string.Empty;
     public string AddError { get; set; } = string.Empty;
     public bool IsAddModalOpen { get; set; }
@@ -39,6 +40,7 @@ internal sealed class HomeViewState
         SnapHeight = snapConfig.Height;
         SnapStrengthRampTime = snapConfig.StrengthRampTime;
         SnapInnerInterpolationTypeIndex = snapConfig.InnerInterpolationTypeIndex;
+        SnapDistanceInterpolationTypeIndex = snapConfig.DistanceInterpolationTypeIndex;
     }
 
     public void ApplyBindings(BindingConfigState bindings)
@@ -71,7 +73,8 @@ internal sealed class HomeViewState
         SnapStartStrength,
         SnapHeight,
         SnapStrengthRampTime,
-        SnapInnerInterpolationTypeIndex);
+        SnapInnerInterpolationTypeIndex,
+        SnapDistanceInterpolationTypeIndex);
 
     public void ResetSnapSettings(
         int snapModeIndex,

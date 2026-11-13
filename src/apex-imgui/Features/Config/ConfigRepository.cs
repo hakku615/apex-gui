@@ -27,6 +27,7 @@ internal sealed class ConfigRepository
         SnapConfigCatalog.HeightKey,
         SnapConfigCatalog.StrengthRampTimeKey,
         SnapConfigCatalog.InnerInterpolationTypeKey,
+        SnapConfigCatalog.DistanceInterpolationTypeKey,
         SpecialWeaponLogicCatalog.RootKey,
         SpecialWeaponLogicCatalog.RapidFireStrategyKey,
         SpecialWeaponLogicCatalog.RapidFireHzKey,
